@@ -1,0 +1,243 @@
+/* frontend/src/assets/styles/editor.css */
+
+/* Scrollable container simulating the workbench backing */
+.preview-canvas-container {
+  overflow-y: auto;
+  height: calc(100vh - 112px); /* Subtract top header (56px) and preview toolbar (48px) */
+  background-color: var(--surface-secondary);
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  transition: background-color 300ms ease-in-out;
+}
+
+/* Page Preview Sheet */
+.a4-page {
+  background-color: #ffffff;
+  color: #1e293b; /* slate-800 for the document body text */
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.28), 0 15px 30px -10px rgba(0, 0, 0, 0.12);
+  position: relative;
+  box-sizing: border-box;
+  transition: transform 0.1s ease-in-out, box-shadow 300ms ease-in-out, border-color 300ms ease-in-out;
+  flex-shrink: 0;
+  
+  /* Standard Aspect Ratio Locks (A4 is 210mm x 297mm) */
+  width: 210mm;
+  min-height: 297mm;
+}
+
+/* Deeper shadow overlay in dark mode to preserve realistic paper elevation */
+.dark .a4-page {
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.75), 0 15px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* Page Orientation modifiers */
+.a4-page.landscape {
+  width: 297mm;
+  max-width: 297mm;
+  min-height: 210mm;
+}
+
+/* Page Border decoration */
+.page-border-active {
+  border: 1px solid rgba(var(--surface-tertiary-rgb), 0.3);
+}
+
+/* Watermark backdrop */
+.page-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  font-size: 4rem;
+  font-weight: 800;
+  color: rgba(164, 195, 178, 0.15); /* Slate watermark opacity */
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+/* Dynamic styling bindings mapped to custom properties set inline */
+.a4-page-content {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+/* Page footer styling */
+.page-footer {
+  position: absolute;
+  bottom: 12mm;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* Ensure child text flows respect spacing custom variables */
+.a4-page-content p {
+  margin-bottom: var(--paragraph-spacing, 8px);
+}
+
+.a4-page-content h1, 
+.a4-page-content h2, 
+.a4-page-content h3,
+.a4-page-content h4 {
+  color: var(--primary-color, #6B9080);
+  font-weight: 700;
+  margin-bottom: calc(var(--paragraph-spacing, 8px) * 1.2);
+}
+
+/* Print specific overrides for perfect PDF rendering output */
+@media print {
+  @page {
+    margin: 0 !important;
+  }
+
+  /* Disable flexbox in print layout to allow page-breaks */
+  .a4-multi-page-document {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  .a4-multi-page-document > div {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Hide interactive workspace UI structures completely */
+  .no-print,
+  aside,
+  header,
+  .preview-toolbar,
+  button {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .preview-canvas-container {
+    background: none !important;
+    background-color: transparent !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Reset scale transforms so printing renders in 1:1 scale dimensions */
+  .a4-page {
+    transform: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 auto !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    height: 297mm !important; /* Lock height on print sheet to fit exactly on A4 */
+    overflow: hidden !important; /* Hide content spill outside the A4 sheet boundaries on print */
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .a4-page-content {
+    overflow: visible !important;
+  }
+
+  .a4-page.landscape {
+    width: 297mm !important;
+    max-width: 297mm !important;
+    height: 210mm !important;
+  }
+
+  /* Avoid splitting tables across pages in mid-row */
+  table, tr, td, th {
+    page-break-inside: avoid !important;
+  }
+
+  /* Avoid orphaned page headings at the bottom */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid !important;
+  }
+
+  /* Force images to align and prevent overflows */
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+/* Enforce hard constraints to prevent any content from escaping the A4 boundaries */
+.document-content {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.a4-page-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.photo-card {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.a4-page-content table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.a4-page-content td,
+.a4-page-content th {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.a4-page-content p,
+.a4-page-content li,
+.a4-page-content span,
+.a4-page-content div {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.signature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+.signature-item {
+  min-width: 0;
+  text-align: center;
+}
+
+.report-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
