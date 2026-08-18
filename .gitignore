@@ -1,0 +1,16 @@
+# Logs
+logs
+*.log
+
+# Dependencies
+node_modules/
+
+# Environment files
+backend/.env
+vision-service/.env
+ocr-service/.env
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
