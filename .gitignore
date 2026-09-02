@@ -1,16 +1,26 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+
+# Python
+venv/
+.venv/
+vision-service/venv/
+__pycache__/
+*.pyc
+
+# Archives
+*.zip
+
+# Environment / secrets
+.env
+.env.*
+
 # Logs
-logs
 *.log
 
-# Dependencies
-node_modules/
-
-# Environment files
-backend/.env
-vision-service/.env
-ocr-service/.env
-
-# IDE / OS files
+# Editor
 .vscode/
 .idea/
 .DS_Store
