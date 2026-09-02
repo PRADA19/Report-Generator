@@ -134,16 +134,18 @@ def generate_local_fallback_content(extracted_data: Dict[str, Any]) -> Dict[str,
         summary = f"The event '{title}'{speaker_clause} was successfully conducted{venue_clause}{date_clause}. The session covered key aspects related to {topic or title}."
         
         # Highlights
-        highlights = [
-            f"Conducted session on modern aspects of {topic or title}.",
-            f"Discussed core concepts and practical applications."
-        ]
+        highlights = []
+        if dept:
+            highlights.append(f"Organized by Department of {dept}")
+        if date:
+            highlights.append(f"Conducted on {date}")
+        if venue:
+            highlights.append(f"Venue: {venue}")
+        if speaker:
+            highlights.append(f"Resource Person: {speaker}")
         
-        # Outcomes
-        outcomes = [
-            f"Participants gained a fundamental understanding of {topic or title}.",
-            f"Attendees engaged in interactive discussions regarding key concepts."
-        ]
+        # Outcomes (Strictly empty unless explicitly provided)
+        outcomes = []
         
     return {
         "objectiveDescription": objective,

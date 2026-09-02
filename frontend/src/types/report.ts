@@ -14,7 +14,7 @@ export interface ReportDraft {
 }
 
 export interface ExportOptions {
-  format: 'pdf' | 'docx' | 'print';
+  format?: 'pdf' | 'docx' | 'print';
   fileName?: string;
   includeImages?: boolean;
 }

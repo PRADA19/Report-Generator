@@ -6,6 +6,7 @@ export const DEFAULT_MOCK_EVENT: EventData = {
   startDate: "2026-08-10",
   endDate: "2026-08-12",
   venue: "Seminar Hall II, KPR Building",
+  time: "10:00 AM to 04:30 PM",
   department: "Computer Science and Engineering",
   organizingBody: "IQAC, KPRCAS",
   collaboration: "AWS Academic Academy Support Services",
@@ -64,42 +65,64 @@ export const DEFAULT_MOCK_EVENT: EventData = {
   eventSummary: "The event commenced with an introductory session on cloud infrastructure concepts. In the afternoon, a hands-on session was conducted focusing on microservices architecture and container configuration. The final day concluded with deployment sandbox testing and feedback collection.",
   participationDetails: "A total of 140 students from the Department of Computer Science and Engineering actively participated in the event.",
   header: {
-    institutionName: "KPR College of Arts and Science",
+    institutionName: "KPR College of Arts Science and Research",
     department: "Computer Science and Engineering",
-    logo: "",
-    details: "(Autonomous) | Affiliated to Bharathiar University",
-    address: "Avinashi Road, Arasur, Coimbatore - 641407",
-    text: "Internal Quality Assurance Cell (IQAC)"
+    logo: "/kprcas_logo.png",
+    details: "(Affiliated to Bharathiar University, Coimbatore)",
+    address: "Avinashi Road, Arasur, Coimbatore – 641 407",
+    text: "Quality System Document",
+    documentTitle: "Quality System Document",
+    reportTitle: "Report of the Event"
   },
   footer: {
     pageNumber: true,
-    contact: "KPRCAS Head Office",
-    text: "IQAC Accredited Report"
+    contact: "KPRCAS/IQAC/EVENTREPORT",
+    text: "VERSION: 2",
+    docCode: "KPRCAS/IQAC/EVENTREPORT",
+    version: "VERSION: 2",
+    docDate: ""
   },
   signatures: {
-    coordinator: true,
+    coordinator: false,
     hod: true,
-    iqac: true,
-    principal: true
+    iqac: false,
+    principal: true,
+    hodLabel: "HOD",
+    deanLabel: "Dean",
+    principalLabel: "Principal"
   }
 };
 
 export const DEFAULT_STYLING: StylingConfig = {
   fontFamily: 'Inter',
-  fontSizeBase: 11,
-  lineHeight: 1.5,
+  fontSizeBase: 10,
+  fontSizeHeader: 13,
+  fontSizeSubHeader: 9,
+  fontSizeTitle: 11,
+  fontSizeReportTitle: 12,
+  fontSizeTable: 10,
+  lineHeight: 1.4,
   paragraphSpacing: 8,
   sectionSpacing: 16,
   textColor: '#1e293b',
-  primaryColor: '#1e3a8a',
+  primaryColor: '#004B87',
+  tableWidthPercent: 100,
+  tableLabelWidthPercent: 32,
+  tablePaddingPx: 6,
+  tableBorderWidthPx: 1,
+  tableBorderColor: '#94a3b8',
+  logoWidthPx: 120,
+  logoHeightPx: 50,
+  logoPosition: 'left',
+  showLogo: true,
   pageLayout: {
     pageSize: 'A4',
     orientation: 'portrait',
     margins: {
-      top: 18,
-      bottom: 18,
-      left: 20,
-      right: 20
+      top: 15,
+      bottom: 15,
+      left: 15,
+      right: 15
     }
   }
 };
@@ -121,6 +144,5 @@ export const DEFAULT_SECTIONS: LayoutSection[] = [
   { id: 'participants', title: 'Participation Statistics', visible: true, order: 3 },
   { id: 'summary', title: 'Detailed Event Summary', visible: true, order: 4 },
   { id: 'outcomes', title: 'Key Program Outcomes', visible: true, order: 5 },
-  { id: 'conclusion', title: 'Concluding Remarks', visible: true, order: 6 },
-  { id: 'images', title: 'Geo-tagged Event Photographs', visible: true, order: 7 }
+  { id: 'images', title: 'Geo-tagged Event Photographs', visible: true, order: 6 }
 ];

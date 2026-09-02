@@ -2,6 +2,7 @@
 
 export interface ResourcePerson {
   name: string;
+  qualification?: string;
   designation: string;
   organization: string;
 }
@@ -31,12 +32,17 @@ export interface HeaderConfig {
   details?: string;
   address?: string;
   text?: string;
+  documentTitle?: string;
+  reportTitle?: string;
 }
 
 export interface FooterConfig {
   pageNumber: boolean;
   contact: string;
   text?: string;
+  docCode?: string;
+  version?: string;
+  docDate?: string;
 }
 
 export interface EventData {
@@ -44,6 +50,7 @@ export interface EventData {
   startDate: string;
   endDate: string;
   venue: string;
+  time?: string;
   department: string;
   organizingBody: string;
   collaboration: string;
@@ -65,6 +72,9 @@ export interface EventData {
     hod: boolean;
     iqac: boolean;
     principal: boolean;
+    hodLabel?: string;
+    deanLabel?: string;
+    principalLabel?: string;
   };
 }
 
@@ -78,11 +88,27 @@ export interface MarginConfig {
 export interface StylingConfig {
   fontFamily: string;
   fontSizeBase: number; // pt
+  fontSizeHeader?: number; // pt (Institution Name)
+  fontSizeSubHeader?: number; // pt (Affiliation & Address)
+  fontSizeTitle?: number; // pt (Quality System Document)
+  fontSizeReportTitle?: number; // pt (Report of the Event)
+  fontSizeTable?: number; // pt
   lineHeight: number; // e.g., 1.5
   paragraphSpacing: number; // px
   sectionSpacing: number; // px
   textColor: string; // hex
   primaryColor: string; // hex
+  // Table size, length/breadth & layout controls
+  tableWidthPercent?: number; // 50 to 100
+  tableLabelWidthPercent?: number; // 20 to 60
+  tablePaddingPx?: number; // 2 to 16
+  tableBorderWidthPx?: number; // 1 to 4
+  tableBorderColor?: string; // hex
+  // Logo dimensions & position
+  logoWidthPx?: number; // 30 to 250
+  logoHeightPx?: number; // 30 to 200
+  logoPosition?: 'left' | 'center' | 'right';
+  showLogo?: boolean;
   pageLayout: {
     pageSize: 'A4' | 'Letter';
     orientation: 'portrait' | 'landscape';
@@ -97,6 +123,7 @@ export interface LayoutConfig {
   imageGridColumns: 1 | 2 | 3;
   sectionOrderLocked: boolean;
   photoLayoutMode?: 'single' | 'two' | 'three' | 'compact';
+  photoLayoutPreset?: string;
   compactPhotoMode?: boolean;
 }
 
@@ -151,10 +178,16 @@ export interface EditorState {
   resetLayout: () => void;
   resetToTemplateDefaults: () => void;
   autofillData: (data: EventData) => void;
+  clearReportData: () => void;
   currentTemplateId: string;
   templateSectionOrders: Record<string, string[]>;
   saveTemplateSectionOrder: (templateId: string, sectionOrder: string[]) => void;
   loadTemplateSectionOrder: (templateId: string) => void;
   setCurrentTemplate: (templateId: string) => void;
   resetTemplateSectionOrder: (templateId: string) => void;
+  // Global Auto Fill Session Management
+  activeAutofillSessionId: string | null;
+  startAutofillSession: () => string;
+  isAutofillSessionActive: (sessionId: string) => boolean;
+  cancelAutofillSession: () => void;
 }

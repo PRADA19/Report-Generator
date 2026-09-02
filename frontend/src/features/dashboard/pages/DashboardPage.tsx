@@ -1,6 +1,6 @@
 // frontend/src/features/dashboard/pages/DashboardPage.tsx
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   Layout, 
   FileText, 
@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../../../components/ui/ThemeToggle';
 import { Button } from '../../../components/ui/Button';
+import { useTemplateStore } from '../../../store/templateStore';
+import { useReportStore } from '../../../store/reportStore';
 
 // Reusable KPI Card component
 const KpiCard: React.FC<{
@@ -42,6 +44,20 @@ const KpiCard: React.FC<{
 
 export const DashboardPage: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
+  const { templates, selectTemplate } = useTemplateStore();
+  const { initializeReportFromTemplate } = useReportStore();
+
+  const handleSelectKprcasTemplate = () => {
+    const kprcasTpl = templates.find(t => t.id === 'kprcas-event-template') || templates[0];
+    if (kprcasTpl) {
+      selectTemplate(kprcasTpl.id);
+      initializeReportFromTemplate(kprcasTpl);
+    } else {
+      selectTemplate('kprcas-event-template');
+    }
+    navigate('/editor');
+  };
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex font-sans theme-transition relative overflow-x-hidden">
@@ -315,7 +331,10 @@ export const DashboardPage: React.FC = () => {
               <div className="space-y-4 flex-1 flex flex-col justify-between">
                 
                 {/* Active template */}
-                <div className="smart-card flex items-center justify-between shadow-sm relative group p-4">
+                <div 
+                  onClick={handleSelectKprcasTemplate}
+                  className="smart-card flex items-center justify-between shadow-sm relative group p-4 cursor-pointer hover:border-accent-primary hover:bg-accent-primary/5 transition-all"
+                >
                   <div className="space-y-1.5 min-w-0 pr-4">
                     <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                       <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-accent-success/50 dark:bg-accent-success/20 text-green-800 dark:text-accent-success border border-green-700/10 dark:border-accent-success/20">
@@ -325,7 +344,7 @@ export const DashboardPage: React.FC = () => {
                         Default Template
                       </span>
                     </div>
-                    <h3 className="text-xs font-bold text-text-primary truncate">
+                    <h3 className="text-xs font-bold text-text-primary group-hover:text-accent-primary transition-colors truncate">
                       KPRCAS IQAC Event Report
                     </h3>
                     <p className="text-[11px] text-text-secondary leading-normal">

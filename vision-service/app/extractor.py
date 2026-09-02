@@ -56,6 +56,8 @@ Do not confuse:
 - contact number with attendance
 - website/email with venue
 
+Avoid extracting any text, headers, footers, logos, or surrounding background/metadata that is not part of the actual poster/circular event details. The content must be ONLY related to the poster itself. If you do not know or are unsure about a detail, keep it blank ("").
+
 Read the entire image, including:
 - top header
 - center content

@@ -86,40 +86,163 @@ export const StylePanel: React.FC = () => {
         <div className="space-y-3">
           <h4 className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider flex items-center space-x-1.5">
             <Type className="w-3.5 h-3.5 text-accent-primary" />
-            <span>Typography</span>
+            <span>Typography & Font Sizes</span>
           </h4>
 
-          <div className="smart-card space-y-3">
-            {/* Font Family */}
-            <Select
-              label="Font Family"
-              value={styling.fontFamily}
-              onChange={(e) => updateStyling({ fontFamily: e.target.value as any })}
-            >
-              {fontOptions.map(font => (
-                <option key={font} value={font} className="bg-surface-primary text-text-primary">{font}</option>
-              ))}
-            </Select>
-
-            {/* Base Font Size */}
-            <div className="space-y-1 pt-1">
-              <div className="flex justify-between items-center mb-1">
-                <label className={labelClasses}>Base Font Size</label>
-                <span className="text-[10px] font-mono font-bold text-text-primary">{styling.fontSizeBase}pt</span>
-              </div>
-              <input
-                type="range"
-                min="9"
-                max="14"
-                step="0.5"
-                value={styling.fontSizeBase}
-                onChange={(e) => updateStyling({ fontSizeBase: parseFloat(e.target.value) })}
-                className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
-              />
+          <div className="smart-card space-y-4">
+            {/* 1. Font Family (Common for all text) */}
+            <div className="space-y-1">
+              <Select
+                label="Font Family (Style for All Text)"
+                value={styling.fontFamily}
+                onChange={(e) => updateStyling({ fontFamily: e.target.value as any })}
+              >
+                {fontOptions.map(font => (
+                  <option key={font} value={font} className="bg-surface-primary text-text-primary">{font}</option>
+                ))}
+              </Select>
+              <p className="text-[9px] text-text-muted">Applies to headers, subheadings, and body content consistently.</p>
             </div>
 
-            {/* Line Height */}
-            <div className="space-y-1">
+            {/* Quick Size Presets */}
+            <div className="space-y-1.5 pt-2 border-t border-surface-tertiary">
+              <label className={labelClasses}>Quick Typography Presets</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateStyling({
+                      fontSizeHeader: 14,
+                      fontSizeTitle: 12,
+                      fontSizeReportTitle: 13,
+                      fontSizeSubHeader: 10.5,
+                      fontSizeBase: 10,
+                      fontSizeTable: 9.5
+                    });
+                  }}
+                  className="py-1.5 text-[9.5px] font-bold rounded-lg border border-surface-tertiary bg-bg-secondary hover:bg-accent-primary/10 hover:border-accent-primary transition-all text-text-primary text-center"
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateStyling({
+                      fontSizeHeader: 12.5,
+                      fontSizeTitle: 10.5,
+                      fontSizeReportTitle: 11.5,
+                      fontSizeSubHeader: 9.5,
+                      fontSizeBase: 9,
+                      fontSizeTable: 8.5
+                    });
+                  }}
+                  className="py-1.5 text-[9.5px] font-bold rounded-lg border border-surface-tertiary bg-bg-secondary hover:bg-accent-primary/10 hover:border-accent-primary transition-all text-text-primary text-center"
+                >
+                  Compact
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateStyling({
+                      fontSizeHeader: 16,
+                      fontSizeTitle: 13.5,
+                      fontSizeReportTitle: 14.5,
+                      fontSizeSubHeader: 12,
+                      fontSizeBase: 11,
+                      fontSizeTable: 10.5
+                    });
+                  }}
+                  className="py-1.5 text-[9.5px] font-bold rounded-lg border border-surface-tertiary bg-bg-secondary hover:bg-accent-primary/10 hover:border-accent-primary transition-all text-text-primary text-center"
+                >
+                  Large
+                </button>
+              </div>
+            </div>
+
+            {/* 2. THE 3 CLEAR FONT SIZE CATEGORIES */}
+            <div className="space-y-3 pt-2 border-t border-surface-tertiary">
+              {/* Category 1: Headers Font Size */}
+              <div className="p-2.5 rounded-xl border border-surface-tertiary bg-bg-secondary/50 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-text-primary flex items-center space-x-1 uppercase tracking-wider">
+                    <span>👑 1. Headers Size</span>
+                  </span>
+                  <span className="text-[10px] font-mono font-extrabold text-accent-primary bg-accent-primary/10 px-2 py-0.5 rounded-md">
+                    {styling.fontSizeHeader || 13} pt
+                  </span>
+                </div>
+                <p className="text-[9px] text-text-muted">Main institution banner, report headline & document title.</p>
+                <input
+                  type="range"
+                  min="10"
+                  max="20"
+                  step="0.5"
+                  value={styling.fontSizeHeader || 13}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    updateStyling({
+                      fontSizeHeader: val,
+                      fontSizeReportTitle: Math.max(9, val - 1),
+                      fontSizeTitle: Math.max(8, val - 2)
+                    });
+                  }}
+                  className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+                />
+              </div>
+
+              {/* Category 2: Subheadings Font Size */}
+              <div className="p-2.5 rounded-xl border border-surface-tertiary bg-bg-secondary/50 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-text-primary flex items-center space-x-1 uppercase tracking-wider">
+                    <span>📌 2. Subheadings Size</span>
+                  </span>
+                  <span className="text-[10px] font-mono font-extrabold text-accent-primary bg-accent-primary/10 px-2 py-0.5 rounded-md">
+                    {styling.fontSizeSubHeader || 9.5} pt
+                  </span>
+                </div>
+                <p className="text-[9px] text-text-muted">Section titles (Purpose, Summary, Outcomes) & sub-headers.</p>
+                <input
+                  type="range"
+                  min="8"
+                  max="16"
+                  step="0.5"
+                  value={styling.fontSizeSubHeader || 9.5}
+                  onChange={(e) => updateStyling({ fontSizeSubHeader: parseFloat(e.target.value) })}
+                  className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+                />
+              </div>
+
+              {/* Category 3: Content / Body Font Size */}
+              <div className="p-2.5 rounded-xl border border-surface-tertiary bg-bg-secondary/50 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-text-primary flex items-center space-x-1 uppercase tracking-wider">
+                    <span>📝 3. Content & Body Size</span>
+                  </span>
+                  <span className="text-[10px] font-mono font-extrabold text-accent-primary bg-accent-primary/10 px-2 py-0.5 rounded-md">
+                    {styling.fontSizeBase || 10} pt
+                  </span>
+                </div>
+                <p className="text-[9px] text-text-muted">Paragraph text, bullet points, outcome lists & table data.</p>
+                <input
+                  type="range"
+                  min="7"
+                  max="14"
+                  step="0.5"
+                  value={styling.fontSizeBase || 10}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    updateStyling({
+                      fontSizeBase: val,
+                      fontSizeTable: Math.max(7, val - 0.5)
+                    });
+                  }}
+                  className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+                />
+              </div>
+            </div>
+
+            {/* Line Spacing */}
+            <div className="space-y-1 pt-2 border-t border-surface-tertiary">
               <div className="flex justify-between items-center mb-1">
                 <label className={labelClasses}>Line Spacing</label>
                 <span className="text-[10px] font-mono font-bold text-text-primary">{styling.lineHeight}</span>
@@ -133,6 +256,254 @@ export const StylePanel: React.FC = () => {
                 onChange={(e) => updateStyling({ lineHeight: parseFloat(e.target.value) })}
                 className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Table Size & Dimensions (Length/Breadth) */}
+        <div className="space-y-3 pt-3 border-t border-surface-tertiary">
+          <h4 className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider flex items-center space-x-1.5">
+            <Sliders className="w-3.5 h-3.5 text-accent-primary" />
+            <span>Table Size & Dimensions</span>
+          </h4>
+
+          <div className="smart-card space-y-3">
+            {/* Table Width % */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center mb-1">
+                <label className={labelClasses}>Table Width / Breadth</label>
+                <span className="text-[10px] font-mono font-bold text-text-primary">{styling.tableWidthPercent || 100}%</span>
+              </div>
+              <input
+                type="range"
+                min="60"
+                max="100"
+                step="1"
+                value={styling.tableWidthPercent || 100}
+                onChange={(e) => updateStyling({ tableWidthPercent: parseInt(e.target.value) })}
+                className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Label Column Width % */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center mb-1">
+                <label className={labelClasses}>Label Column Width</label>
+                <span className="text-[10px] font-mono font-bold text-text-primary">{styling.tableLabelWidthPercent || 32}%</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="50"
+                step="1"
+                value={styling.tableLabelWidthPercent || 32}
+                onChange={(e) => updateStyling({ tableLabelWidthPercent: parseInt(e.target.value) })}
+                className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Cell Padding */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center mb-1">
+                <label className={labelClasses}>Cell Padding (Row Height)</label>
+                <span className="text-[10px] font-mono font-bold text-text-primary">{styling.tablePaddingPx || 6}px</span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="14"
+                step="1"
+                value={styling.tablePaddingPx || 6}
+                onChange={(e) => updateStyling({ tablePaddingPx: parseInt(e.target.value) })}
+                className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+              />
+            </div>
+
+            {/* Border Width & Color */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label className={labelClasses}>Border Width</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="4"
+                  step="0.5"
+                  value={styling.tableBorderWidthPx || 1}
+                  onChange={(e) => updateStyling({ tableBorderWidthPx: parseFloat(e.target.value) || 1 })}
+                  className="w-full bg-surface-primary border border-surface-tertiary rounded-xl p-1.5 text-center text-xs text-text-primary"
+                />
+              </div>
+              <div>
+                <label className={labelClasses}>Border Color</label>
+                <div className="flex items-center space-x-1">
+                  <input
+                    type="color"
+                    value={styling.tableBorderColor || '#94a3b8'}
+                    onChange={(e) => updateStyling({ tableBorderColor: e.target.value })}
+                    className="w-7 h-7 rounded-lg border border-surface-tertiary bg-transparent cursor-pointer flex-shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={styling.tableBorderColor || '#94a3b8'}
+                    onChange={(e) => updateStyling({ tableBorderColor: e.target.value })}
+                    className="w-full bg-surface-primary border border-surface-tertiary rounded-xl p-1 text-center font-mono text-[10px]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Logo & Branding */}
+        <div className="space-y-3 pt-3 border-t border-surface-tertiary">
+          <h4 className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider flex items-center space-x-1.5">
+            <Maximize className="w-3.5 h-3.5 text-accent-primary" />
+            <span>Logo & Header Branding</span>
+          </h4>
+
+          <div className="smart-card space-y-3">
+            {/* Show Logo Toggle */}
+            <div className="flex items-center justify-between">
+              <label className={labelClasses}>Display Logo</label>
+              <input
+                type="checkbox"
+                checked={styling.showLogo !== false}
+                onChange={(e) => updateStyling({ showLogo: e.target.checked })}
+                className="w-4 h-4 rounded text-accent-primary focus:ring-accent-primary accent-accent-primary cursor-pointer"
+              />
+            </div>
+
+            {/* Custom Logo Image URL / Upload */}
+            <div className="space-y-1.5">
+              <label className={labelClasses}>Custom Logo Image URL</label>
+              <Input
+                type="text"
+                value={useEditorStore.getState().data.header?.logo || ''}
+                onChange={(e) => useEditorStore.getState().updateNestedField('header.logo', e.target.value)}
+                placeholder="Paste Image URL or data:image/..."
+                className="text-xs"
+              />
+            </div>
+
+            {/* Logo Dimensions & Position */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelClasses}>Logo Width (px)</label>
+                <input
+                  type="number"
+                  min="30"
+                  max="250"
+                  value={styling.logoWidthPx || 120}
+                  onChange={(e) => updateStyling({ logoWidthPx: parseInt(e.target.value) || 120 })}
+                  className="w-full bg-surface-primary border border-surface-tertiary rounded-xl p-1.5 text-center text-xs text-text-primary"
+                />
+              </div>
+              <div>
+                <label className={labelClasses}>Logo Height (px)</label>
+                <input
+                  type="number"
+                  min="20"
+                  max="200"
+                  value={styling.logoHeightPx || 50}
+                  onChange={(e) => updateStyling({ logoHeightPx: parseInt(e.target.value) || 50 })}
+                  className="w-full bg-surface-primary border border-surface-tertiary rounded-xl p-1.5 text-center text-xs text-text-primary"
+                />
+              </div>
+            </div>
+
+            {/* Logo Position / Alignment */}
+            <div className="space-y-1.5">
+              <label className={labelClasses}>Logo Position Alignment</label>
+              <div className="flex bg-bg-secondary p-1 rounded-xl border border-surface-tertiary">
+                <button
+                  type="button"
+                  onClick={() => updateStyling({ logoPosition: 'left' })}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                    (styling.logoPosition || 'left') === 'left' 
+                      ? 'bg-surface-primary text-text-primary shadow-sm' 
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Left
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyling({ logoPosition: 'center' })}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                    styling.logoPosition === 'center' 
+                      ? 'bg-surface-primary text-text-primary shadow-sm' 
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Center
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyling({ logoPosition: 'right' })}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                    styling.logoPosition === 'right' 
+                      ? 'bg-surface-primary text-text-primary shadow-sm' 
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Right
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer & Signature Controls */}
+        <div className="space-y-3 pt-3 border-t border-surface-tertiary">
+          <h4 className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider flex items-center space-x-1.5">
+            <LayoutList className="w-3.5 h-3.5 text-accent-primary" />
+            <span>Footer & Signature Labels</span>
+          </h4>
+
+          <div className="smart-card space-y-3">
+            <Input
+              label="Footer Document Code"
+              value={useEditorStore.getState().data.footer?.docCode || ''}
+              onChange={(e) => useEditorStore.getState().updateNestedField('footer.docCode', e.target.value)}
+              className="text-xs"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                label="Footer Version"
+                value={useEditorStore.getState().data.footer?.version || ''}
+                onChange={(e) => useEditorStore.getState().updateNestedField('footer.version', e.target.value)}
+                className="text-xs"
+              />
+              <Input
+                label="Footer Date"
+                value={useEditorStore.getState().data.footer?.docDate || ''}
+                onChange={(e) => useEditorStore.getState().updateNestedField('footer.docDate', e.target.value)}
+                className="text-xs"
+              />
+            </div>
+            
+            <div className="pt-2 border-t border-surface-tertiary space-y-2">
+              <label className={labelClasses}>Signature Labels</label>
+              <div className="grid grid-cols-3 gap-2">
+                <Input
+                  value={useEditorStore.getState().data.signatures?.hodLabel || 'HOD'}
+                  onChange={(e) => useEditorStore.getState().updateNestedField('signatures.hodLabel', e.target.value)}
+                  placeholder="HOD"
+                  className="text-center text-xs"
+                />
+                <Input
+                  value={useEditorStore.getState().data.signatures?.deanLabel || 'Dean'}
+                  onChange={(e) => useEditorStore.getState().updateNestedField('signatures.deanLabel', e.target.value)}
+                  placeholder="Dean"
+                  className="text-center text-xs"
+                />
+                <Input
+                  value={useEditorStore.getState().data.signatures?.principalLabel || 'Principal'}
+                  onChange={(e) => useEditorStore.getState().updateNestedField('signatures.principalLabel', e.target.value)}
+                  placeholder="Principal"
+                  className="text-center text-xs"
+                />
+              </div>
             </div>
           </div>
         </div>

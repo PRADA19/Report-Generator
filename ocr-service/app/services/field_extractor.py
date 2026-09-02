@@ -101,8 +101,8 @@ def extract_structured_fields(layout_blocks: list[dict]) -> tuple[dict, dict]:
         department = found_dept if found_dept else ""
         conf_scores["department"] = 0.4 if found_dept else 0.0
 
-    # Organizer fallback
-    organized_by = f"Department of {department}" if department else ""
+    # Organizer (leave empty unless explicitly extracted)
+    organized_by = ""
 
     # 3. Date & Time Extraction
     date_raw = ""
@@ -187,8 +187,8 @@ def extract_structured_fields(layout_blocks: list[dict]) -> tuple[dict, dict]:
         if not re.search(r"\b(dr|prof|mr|ms|mrs)\.", name_text, re.IGNORECASE) and len(name_text) < 4:
             continue
             
-        designation = "Resource Person"
-        organization = "Invited Organization"
+        designation = ""
+        organization = ""
         
         # Look at the blocks immediately after this speaker block in reading order
         idx_in_flow = sb["readingOrder"]

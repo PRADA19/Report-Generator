@@ -1,8 +1,7 @@
 // frontend/src/features/editor/store/editorStore.ts
 import { create } from 'zustand';
-import type { EditorState, EventData, StylingConfig, LayoutConfig, LayoutSection } from '../../../types/editor';
+import type { EditorState, EventData, StylingConfig, LayoutConfig, LayoutSection, HeaderConfig, FooterConfig } from '../../../types/editor';
 import { DEFAULT_MOCK_EVENT, DEFAULT_STYLING, DEFAULT_LAYOUT_CONFIG, DEFAULT_SECTIONS } from './mockData';
-import { fillEmptyBlanks } from '../../../utils/eventDataMerge';
 
 const saveToLocalStorage = (state: {
   templateId: string;
@@ -31,14 +30,16 @@ const saveToLocalStorage = (state: {
 };
 
 const loadInitialState = () => {
-  let templateSectionOrders = {
-    'kprcas-iqac-v1': ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'conclusion', 'images']
+  let templateSectionOrders: Record<string, string[]> = {
+    'kprcas-iqac-v1': ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'images'],
+    'kprcas-event-template': ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'images']
   };
   try {
     if (typeof localStorage !== 'undefined') {
       const savedOrders = localStorage.getItem('eventflow_template_section_orders');
       if (savedOrders) {
-        templateSectionOrders = JSON.parse(savedOrders);
+        const parsedOrders = JSON.parse(savedOrders);
+        templateSectionOrders = { ...templateSectionOrders, ...parsedOrders };
       }
     }
   } catch (err) {
@@ -50,14 +51,28 @@ const loadInitialState = () => {
       const saved = localStorage.getItem('eventflow_editor_state');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.data && parsed.styling && parsed.sections) {
+        if (parsed.data && parsed.styling && parsed.sections && Array.isArray(parsed.sections)) {
+          const validSectionIds = new Set(['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'images']);
+          let filteredSections = parsed.sections.filter((s: any) => s && s.id && validSectionIds.has(s.id));
+          
+          // Ensure all default sections are present
+          DEFAULT_SECTIONS.forEach(defSec => {
+            if (!filteredSections.some((s: any) => s.id === defSec.id)) {
+              filteredSections.push(defSec);
+            }
+          });
+
+          if (filteredSections.length === 0) {
+            filteredSections = [...DEFAULT_SECTIONS];
+          }
+
           return {
-            templateId: parsed.templateId || 'kprcas-iqac-v1',
-            currentTemplateId: parsed.currentTemplateId || parsed.templateId || 'kprcas-iqac-v1',
-            data: parsed.data,
-            styling: parsed.styling,
-            layoutConfig: parsed.layoutConfig || DEFAULT_LAYOUT_CONFIG,
-            sections: parsed.sections,
+            templateId: parsed.templateId || 'kprcas-event-template',
+            currentTemplateId: parsed.currentTemplateId || parsed.templateId || 'kprcas-event-template',
+            data: { ...DEFAULT_MOCK_EVENT, ...parsed.data },
+            styling: { ...DEFAULT_STYLING, ...parsed.styling },
+            layoutConfig: { ...DEFAULT_LAYOUT_CONFIG, ...(parsed.layoutConfig || {}) },
+            sections: filteredSections,
             layoutLocked: parsed.layoutLocked || false,
             templateSectionOrders
           };
@@ -68,8 +83,8 @@ const loadInitialState = () => {
     console.error('Failed to load initial state:', err);
   }
   return {
-    templateId: 'kprcas-iqac-v1',
-    currentTemplateId: 'kprcas-iqac-v1',
+    templateId: 'kprcas-event-template',
+    currentTemplateId: 'kprcas-event-template',
     data: DEFAULT_MOCK_EVENT,
     styling: DEFAULT_STYLING,
     layoutConfig: DEFAULT_LAYOUT_CONFIG,
@@ -242,7 +257,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   resetToDefault: () => set(() => {
     const defaults = {
-      templateId: 'kprcas-iqac-v1',
+      templateId: 'kprcas-event-template',
       data: DEFAULT_MOCK_EVENT,
       styling: DEFAULT_STYLING,
       layoutConfig: DEFAULT_LAYOUT_CONFIG,
@@ -490,8 +505,8 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   resetToTemplateDefaults: () => set((state) => {
     const defaults = {
-      templateId: 'kprcas-iqac-v1',
-      currentTemplateId: 'kprcas-iqac-v1',
+      templateId: 'kprcas-event-template',
+      currentTemplateId: 'kprcas-event-template',
       data: DEFAULT_MOCK_EVENT,
       styling: DEFAULT_STYLING,
       layoutConfig: DEFAULT_LAYOUT_CONFIG,
@@ -504,7 +519,56 @@ export const useEditorStore = create<EditorState>((set) => ({
   }),
 
   autofillData: (newData) => set((state) => {
-    const mergedData = fillEmptyBlanks(state.data, newData);
+    const emptyData: EventData = {
+      title: '',
+      startDate: '',
+      endDate: '',
+      venue: '',
+      department: '',
+      organizingBody: '',
+      collaboration: '',
+      resourcePersons: [],
+      participantCount: {
+        facultyCount: 0,
+        studentCount: 0,
+        externalCount: 0,
+        total: 0
+      },
+      purpose: '',
+      summaryPoints: [],
+      outcomePoints: [],
+      images: [],
+      conclusion: '',
+      attendancePercentage: '',
+      objectiveDescription: '',
+      eventSummary: '',
+      participationDetails: '',
+      header: { ...DEFAULT_MOCK_EVENT.header } as HeaderConfig,
+      footer: { ...DEFAULT_MOCK_EVENT.footer } as FooterConfig,
+      signatures: { ...DEFAULT_MOCK_EVENT.signatures } as any
+    };
+
+    console.log('[AUTO FILL 08] Zustand data before update:', state.data);
+
+    const mergedData: EventData = {
+      ...emptyData,
+      ...newData,
+      header: {
+        ...emptyData.header,
+        ...(newData.header || {})
+      } as HeaderConfig,
+      footer: {
+        ...emptyData.footer,
+        ...(newData.footer || {})
+      } as FooterConfig,
+      signatures: {
+        ...emptyData.signatures,
+        ...(newData.signatures || {})
+      } as any
+    };
+
+    console.log('[AUTO FILL 09] Zustand data after update:', mergedData);
+
     const nextState = {
       templateId: state.templateId,
       currentTemplateId: state.templateId,
@@ -519,6 +583,50 @@ export const useEditorStore = create<EditorState>((set) => ({
     return { data: mergedData };
   }),
 
+  clearReportData: () => set((state) => {
+    const emptyData: EventData = {
+      title: '',
+      startDate: '',
+      endDate: '',
+      venue: '',
+      time: '',
+      department: '',
+      organizingBody: '',
+      collaboration: '',
+      resourcePersons: [],
+      participantCount: {
+        facultyCount: 0,
+        studentCount: 0,
+        externalCount: 0,
+        total: 0
+      },
+      purpose: '',
+      summaryPoints: [],
+      outcomePoints: [],
+      images: [],
+      conclusion: '',
+      attendancePercentage: '',
+      objectiveDescription: '',
+      eventSummary: '',
+      participationDetails: '',
+      header: { ...DEFAULT_MOCK_EVENT.header } as HeaderConfig,
+      footer: { ...DEFAULT_MOCK_EVENT.footer } as FooterConfig,
+      signatures: { ...DEFAULT_MOCK_EVENT.signatures } as any
+    };
+    const nextState = {
+      templateId: state.templateId,
+      currentTemplateId: state.templateId,
+      data: emptyData,
+      styling: state.styling,
+      layoutConfig: state.layoutConfig,
+      sections: state.sections,
+      layoutLocked: state.layoutLocked,
+      templateSectionOrders: state.templateSectionOrders
+    };
+    saveToLocalStorage(nextState);
+    return { data: emptyData };
+  }),
+
   saveTemplateSectionOrder: (templateId, sectionOrder) => set((state) => {
     const nextOrders = { ...state.templateSectionOrders, [templateId]: sectionOrder };
     if (typeof localStorage !== 'undefined') {
@@ -528,7 +636,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   }),
 
   loadTemplateSectionOrder: (templateId) => set((state) => {
-    const order = state.templateSectionOrders[templateId] || ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'conclusion', 'images'];
+    const order = state.templateSectionOrders[templateId] || ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'images'];
     const nextSections = [...state.sections];
     nextSections.sort((a, b) => {
       const indexA = order.indexOf(a.id);
@@ -546,7 +654,7 @@ export const useEditorStore = create<EditorState>((set) => ({
     let templateOrder = state.templateSectionOrders[templateId];
     if (!templateOrder) {
       // Default order
-      templateOrder = ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'conclusion', 'images'];
+      templateOrder = ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'images'];
     }
 
     const nextSections = [...state.sections];
@@ -587,7 +695,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   }),
 
   resetTemplateSectionOrder: (templateId) => set((state) => {
-    const defaultOrder = ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'conclusion', 'images'];
+    const defaultOrder = ['header', 'purpose', 'resource_persons', 'participants', 'summary', 'outcomes', 'images'];
     const nextSections = [...state.sections];
     nextSections.sort((a, b) => {
       const indexA = defaultOrder.indexOf(a.id);
@@ -623,5 +731,54 @@ export const useEditorStore = create<EditorState>((set) => ({
       sections: reorderedSections,
       templateSectionOrders: nextTemplateOrders
     };
-  })
+  }),
+
+  // Global Auto Fill Session Management
+  activeAutofillSessionId: null,
+
+  startAutofillSession: () => {
+    const sessionId = crypto.randomUUID();
+    set(() => {
+      const emptyData: EventData = {
+        title: '',
+        startDate: '',
+        endDate: '',
+        venue: '',
+        time: '',
+        department: '',
+        organizingBody: '',
+        collaboration: '',
+        resourcePersons: [],
+        participantCount: {
+          facultyCount: 0,
+          studentCount: 0,
+          externalCount: 0,
+          total: 0
+        },
+        purpose: '',
+        summaryPoints: [],
+        outcomePoints: [],
+        images: [],
+        conclusion: '',
+        attendancePercentage: '',
+        objectiveDescription: '',
+        eventSummary: '',
+        participationDetails: '',
+        header: { ...DEFAULT_MOCK_EVENT.header } as HeaderConfig,
+        footer: { ...DEFAULT_MOCK_EVENT.footer } as FooterConfig,
+        signatures: { ...DEFAULT_MOCK_EVENT.signatures } as any
+      };
+      return {
+        activeAutofillSessionId: sessionId,
+        data: emptyData
+      };
+    });
+    return sessionId;
+  },
+
+  isAutofillSessionActive: (sessionId: string): boolean => {
+    return useEditorStore.getState().activeAutofillSessionId === sessionId;
+  },
+
+  cancelAutofillSession: () => set({ activeAutofillSessionId: null })
 }));

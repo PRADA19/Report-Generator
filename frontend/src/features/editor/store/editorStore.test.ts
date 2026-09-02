@@ -10,9 +10,9 @@ describe('EventFlow Zustand Editor Store', () => {
 
   it('should successfully reset state to template defaults', () => {
     const state = useEditorStore.getState();
-    expect(state.templateId).toBe('kprcas-iqac-v1');
+    expect(state.templateId).toBe('kprcas-event-template');
     expect(state.layoutLocked).toBe(false);
-    expect(state.sections.length).toBe(8);
+    expect(state.sections.length).toBe(7);
   });
 
   it('should dynamically append a blank resource person profile', () => {
@@ -32,13 +32,14 @@ describe('EventFlow Zustand Editor Store', () => {
 
   it('should update specific page margin dimensions correctly', () => {
     const stateBefore = useEditorStore.getState();
+    const initialRightMargin = stateBefore.styling.pageLayout.margins.right;
     
     stateBefore.updateMargins({ top: 15, left: 25 });
 
     const stateAfter = useEditorStore.getState();
     expect(stateAfter.styling.pageLayout.margins.top).toBe(15);
     expect(stateAfter.styling.pageLayout.margins.left).toBe(25);
-    expect(stateAfter.styling.pageLayout.margins.right).toBe(20); // Right margin remains unaffected
+    expect(stateAfter.styling.pageLayout.margins.right).toBe(initialRightMargin); // Right margin remains unaffected
   });
 
   it('should swap section orders and normalize indices upon reordering', () => {
@@ -65,7 +66,7 @@ describe('EventFlow Zustand Editor Store', () => {
 
     const stateAfter = useEditorStore.getState();
     expect(stateAfter.data.images.length).toBe(initialImageCount - 1);
-    expect(stateAfter.data.images.find(img => img.id === imageIdToRemove)).toBeUndefined();
+    expect(stateAfter.data.images.find((img: any) => img.id === imageIdToRemove)).toBeUndefined();
   });
 
   it('should save and load independent section orders per template', () => {
@@ -138,10 +139,75 @@ describe('EventFlow Zustand Editor Store', () => {
     state.updateLayoutConfig({ compactPhotoMode: true, photoLayoutMode: 'compact' });
 
     freshState = useEditorStore.getState();
-    const updatedImage = freshState.data.images.find(img => img.id === addedImage.id);
+    const updatedImage = freshState.data.images.find((img: any) => img.id === addedImage.id);
     expect(updatedImage?.widthPercent).toBe(50);
     expect(updatedImage?.heightPx).toBe(120);
     expect(freshState.layoutConfig.compactPhotoMode).toBe(true);
     expect(freshState.layoutConfig.photoLayoutMode).toBe('compact');
+  });
+
+  it('should invalidate stale sessions when a new autofill session is started', () => {
+    const store = useEditorStore.getState();
+
+    // 1. Start Session A
+    const sessionA = store.startAutofillSession();
+    expect(useEditorStore.getState().activeAutofillSessionId).toBe(sessionA);
+    expect(useEditorStore.getState().isAutofillSessionActive(sessionA)).toBe(true);
+
+    // 2. Start Session B before A finishes
+    const sessionB = store.startAutofillSession();
+    expect(useEditorStore.getState().activeAutofillSessionId).toBe(sessionB);
+    expect(useEditorStore.getState().isAutofillSessionActive(sessionB)).toBe(true);
+    // Session A is now inactive
+    expect(useEditorStore.getState().isAutofillSessionActive(sessionA)).toBe(false);
+
+    // 3. Simulating stale response arrival for Session A
+    const staleData = {
+      title: 'Stale Event Title A',
+      startDate: '2026-08-01',
+      endDate: '2026-08-01',
+      venue: 'Stale Hall A',
+      department: 'Computer Science',
+      organizingBody: 'Dept',
+      collaboration: '',
+      purpose: '',
+      summaryPoints: [],
+      outcomePoints: [],
+      resourcePersons: [],
+      participantCount: { facultyCount: 0, studentCount: 0, externalCount: 0, total: 0 },
+      images: []
+    };
+
+    if (useEditorStore.getState().isAutofillSessionActive(sessionA)) {
+      useEditorStore.getState().autofillData(staleData);
+    }
+
+    // Verify stale data A was rejected
+    expect(useEditorStore.getState().data.title).not.toBe('Stale Event Title A');
+
+    // 4. Simulating fresh response arrival for Session B
+    const freshDataB = {
+      title: 'Fresh Event Title B',
+      startDate: '2026-08-25',
+      endDate: '2026-08-25',
+      venue: 'Auditorium B',
+      department: 'Information Technology',
+      organizingBody: 'IT Dept',
+      collaboration: '',
+      purpose: 'Fresh Purpose B',
+      summaryPoints: [],
+      outcomePoints: [],
+      resourcePersons: [],
+      participantCount: { facultyCount: 0, studentCount: 0, externalCount: 0, total: 0 },
+      images: []
+    };
+
+    if (useEditorStore.getState().isAutofillSessionActive(sessionB)) {
+      useEditorStore.getState().autofillData(freshDataB);
+    }
+
+    // Verify fresh data B was accepted
+    expect(useEditorStore.getState().data.title).toBe('Fresh Event Title B');
+    expect(useEditorStore.getState().data.venue).toBe('Auditorium B');
   });
 });

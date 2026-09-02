@@ -7,14 +7,9 @@ import { Badge } from '../common/Badge';
 import { useEditorStore } from '../../features/editor/store/editorStore';
 import type { EventData } from '../../types/editor';
 import { KprcasTemplate } from '../../features/editor/components/CenterPanel/KprcasTemplate';
-import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
-import { normalizeOcrText } from '../../utils/ocrNormalizer';
-import { parsePosterText } from '../../utils/posterParser';
 import { generateEventReport } from '../../utils/reportGenerator';
-import { preprocessForOCR } from '../../utils/canvasPreprocessor';
-import { calculateFieldConfidence } from '../../utils/confidenceEngine';
-import { fillEmptyBlanks } from '../../utils/eventDataMerge';
+import { executePosterAutofill, formatToInputDate, type ExtractedPosterFields } from '../../utils/autofillPipeline';
 
 // Load pdf.js worker globally using cdnjs fallback to prevent bundle pathing failures
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -27,6 +22,28 @@ interface AiAutofillModalProps {
 export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadSessionIdRef = useRef<string>('');
+
+  // Editable Extracted Fields state
+  const [extractedData, setExtractedData] = useState<ExtractedPosterFields>({
+    title: '',
+    batch: '', // audience
+    date: '',
+    time: '',
+    eventType: '',
+    dressCode: '',
+    specialNote: '',
+    venue: '',
+    department: '',
+    speaker: '',
+    coordinator: '', // organizer
+    facultyInCharge: '',
+    theme: '', // speaker designation
+    description: '',
+    resourcePersons: []
+  });
+
+  // Generated Report Preview state
+  const [generatedReport, setGeneratedReport] = useState<any>(null);
 
   // Modal local states
   const [fileName, setFileName] = useState<string>('');
@@ -61,80 +78,127 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
     theme: 100,
   });
 
-  const [isVisionAvailable, setIsVisionAvailable] = useState<boolean>(false);
+  const [visionStatus, setVisionStatus] = useState<'ONLINE' | 'PROCESSING' | 'QUOTA_WARNING' | 'QUOTA_EXCEEDED' | 'OFFLINE' | 'ERROR' | 'loading'>('loading');
+  const [extractionMethod, setExtractionMethod] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
+      setVisionStatus('loading');
       fetch('/api/autofill/health')
-        .then(res => res.json())
-        .then(data => {
-          setIsVisionAvailable(data.available === true);
+        .then(async res => {
+          const data = await res.json().catch(() => ({}));
+          if (data && data.status) {
+            setVisionStatus(data.status);
+          } else if (!res.ok) {
+            setVisionStatus('OFFLINE');
+          } else {
+            setVisionStatus('ONLINE');
+          }
         })
-        .catch(() => {
-          setIsVisionAvailable(false);
+        .catch((error) => {
+          console.error('Health check failed:', error);
+          setVisionStatus('OFFLINE');
         });
     }
   }, [isOpen]);
 
-  // Editable Extracted Fields state
-  const [extractedData, setExtractedData] = useState({
-    title: '',
-    batch: '', // audience
-    date: '',
-    time: '',
-    eventType: '',
-    dressCode: '',
-    specialNote: '',
-    venue: '',
-    department: '',
-    speaker: '',
-    coordinator: '', // organizer
-    facultyInCharge: '',
-    theme: '', // speaker designation
-    description: '',
-  });
+  // Initialize modal state from Zustand store if the editor already contains data when opened
+  useEffect(() => {
+    if (isOpen) {
+      const store = useEditorStore.getState();
+      const titleVal = store.data.title;
+      if (titleVal) {
+        setExtractedData({
+          title: titleVal,
+          batch: store.data.participationDetails ? 'Students' : '',
+          date: store.data.startDate || '',
+          time: '',
+          eventType: '',
+          dressCode: '',
+          specialNote: '',
+          venue: store.data.venue || '',
+          department: store.data.department || '',
+          speaker: store.data.resourcePersons?.[0]?.name || '',
+          coordinator: store.data.organizingBody || '',
+          facultyInCharge: '',
+          theme: store.data.resourcePersons?.[0]?.designation || '',
+          description: store.data.purpose || '',
+        });
+        setGeneratedReport({
+          objective: store.data.purpose || '',
+          objectiveDescription: store.data.objectiveDescription || '',
+          eventSummary: store.data.eventSummary || '',
+          detailedHighlights: store.data.summaryPoints || [],
+          outcomes: store.data.outcomePoints || [],
+          attendancePercentage: store.data.attendancePercentage || '',
+          participationDetails: store.data.participationDetails || ''
+        });
+        setHasGenerated(true);
+      }
+    }
+  }, [isOpen]);
 
-  // Generated Report Preview state
-  const [generatedReport, setGeneratedReport] = useState<any>(null);
+  // Real-time synchronization of modal state fields to editor store
+  useEffect(() => {
+    if (!isOpen || !hasGenerated || !generatedReport) return;
+
+    const modalResourcePersons = (extractedData.resourcePersons && extractedData.resourcePersons.length > 0)
+      ? extractedData.resourcePersons
+      : (extractedData.speaker ? [{
+          name: extractedData.speaker.trim(),
+          designation: extractedData.theme || "",
+          organization: extractedData.coordinator || ""
+        }] : []);
+
+    const inputStartDateStr = formatToInputDate(extractedData.eventStartDate || extractedData.date);
+    const inputEndDateStr = formatToInputDate(extractedData.eventEndDate || extractedData.eventStartDate || extractedData.date);
+    const collaborationStr = (extractedData.collaborators || []).join(', ');
+
+    const incomingData: EventData = {
+      title: extractedData.title || '',
+      startDate: inputStartDateStr,
+      endDate: inputEndDateStr || inputStartDateStr,
+      venue: extractedData.venue || '',
+      time: extractedData.time || '',
+      department: extractedData.department || '',
+      organizingBody: extractedData.coordinator || '',
+      collaboration: collaborationStr,
+      purpose: generatedReport.objective || '',
+      objectiveDescription: generatedReport.objectiveDescription || '',
+      eventSummary: generatedReport.eventSummary || '',
+      summaryPoints: generatedReport.detailedHighlights || generatedReport.highlights || [],
+      outcomePoints: generatedReport.outcomes || [],
+      attendancePercentage: generatedReport.attendancePercentage || '',
+      participationDetails: generatedReport.participationDetails || '',
+      resourcePersons: modalResourcePersons,
+      participantCount: {
+        facultyCount: 0,
+        studentCount: 0,
+        externalCount: 0,
+        total: 0
+      },
+      images: []
+    };
+
+    const store = useEditorStore.getState();
+    const isDifferent = 
+      store.data.title !== incomingData.title ||
+      store.data.startDate !== incomingData.startDate ||
+      store.data.venue !== incomingData.venue ||
+      store.data.time !== incomingData.time ||
+      store.data.department !== incomingData.department ||
+      store.data.organizingBody !== incomingData.organizingBody ||
+      store.data.purpose !== incomingData.purpose ||
+      JSON.stringify(store.data.resourcePersons) !== JSON.stringify(incomingData.resourcePersons);
+
+    if (isDifferent) {
+      store.autofillData(incomingData);
+    }
+  }, [extractedData, generatedReport, isOpen, hasGenerated]);
+
 
   // Load current template layout and editor settings from Zustand store
   const { data: storeData, styling: storeStyling, layoutConfig: storeLayoutConfig, sections: storeSections } = useEditorStore();
-
-  // Combine extracted, generated, and template-fallback states into a single preview layout
-  const speakerNamePreview = extractedData.speaker ? extractedData.speaker.split('(')[0].trim() : "";
-  const incomingPreviewData: EventData = {
-    title: extractedData.title,
-    startDate: extractedData.date,
-    endDate: extractedData.date,
-    venue: extractedData.venue,
-    department: extractedData.department,
-    organizingBody: extractedData.coordinator,
-    collaboration: '',
-    purpose: generatedReport?.objective || '',
-    objectiveDescription: generatedReport?.objectiveDescription || '',
-    eventSummary: generatedReport?.eventSummary || '',
-    summaryPoints: generatedReport?.detailedHighlights || generatedReport?.highlights || [],
-    outcomePoints: generatedReport?.outcomes || [],
-    attendancePercentage: generatedReport?.attendancePercentage || '',
-    conclusion: generatedReport?.detailedConclusion || generatedReport?.conclusion || '',
-    participationDetails: generatedReport?.participationDetails || '',
-    resourcePersons: speakerNamePreview ? [
-      {
-        name: speakerNamePreview,
-        designation: extractedData.theme || "",
-        organization: extractedData.coordinator || ""
-      }
-    ] : [],
-    participantCount: {
-      facultyCount: 0,
-      studentCount: 0,
-      externalCount: 0,
-      total: 0
-    },
-    images: []
-  };
-
-  const previewData = fillEmptyBlanks(storeData, incomingPreviewData);
 
   // Prevent browser memory leaks by revoking old preview URLs
   useEffect(() => {
@@ -171,16 +235,17 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
       description: '',
     });
     setGeneratedReport(null);
+    setExtractionMethod('');
+    setDocumentFingerprint('');
+    setPredictedData({});
+    setParserConfidence(null);
     if (posterPreview) {
       URL.revokeObjectURL(posterPreview);
     }
     setPosterPreview(null);
     setCurrentPoster(null);
-    setParserConfidence(null);
     setOcrLanguage('eng');
     uploadSessionIdRef.current = '';
-    setDocumentFingerprint('');
-    setPredictedData({});
     setFieldConfidence({
       title: 100,
       batch: 100,
@@ -248,258 +313,91 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
     });
   };
 
-  /**
-   * Fallback route: local Tesseract OCR + posterParser heuristics
-   */
-  const runLocalFallbackOCR = async (
-    fileBlob: Blob,
-    lang: string
-  ): Promise<{ text: string; confidence: number }> => {
-    // Check if mock plaintext first
-    try {
-      if (fileBlob.type.startsWith('text/')) {
-        const text = await fileBlob.text();
-        return { text, confidence: 99 };
-      }
-    } catch (e) {}
-
-    const result = await Tesseract.recognize(fileBlob, lang);
-    return {
-      text: result.data.text,
-      confidence: Math.round(result.data.confidence)
-    };
-  };
-
-  const processPoster = async (file: File, sessionId: string, lang: string = 'eng') => {
+  const processPoster = async (file: File, sessionId: string) => {
+    const store = useEditorStore.getState();
     setIsExtracting(true);
     setHasGenerated(false);
     setExtractionProgress(10);
     setStatus('Analyzing file contents...');
 
     try {
-      // 1. Calculate file SHA-256 fingerprint for user learning database key
       const fingerprint = await calculateFingerprint(file);
-      if (sessionId !== uploadSessionIdRef.current) return;
+      if (!store.isAutofillSessionActive(sessionId)) return;
       setDocumentFingerprint(fingerprint);
-      setExtractionProgress(20);
 
-      // 2. If PDF, render the first page to a canvas and convert to PNG blob
-      let processedFile: File | Blob = file;
-      if (file.type === 'application/pdf') {
-        setStatus('Rendering PDF circular to image...');
-        processedFile = await renderPdfPageToBlob(file);
-        setExtractionProgress(40);
-      }
+      const result = await executePosterAutofill(file, {
+        sessionId,
+        onProgress: (step, msg) => {
+          if (store.isAutofillSessionActive(sessionId)) {
+            setExtractionProgress(Math.min(90, step * 15));
+            setStatus(msg);
+          }
+        },
+        isCancelled: () => !store.isAutofillSessionActive(sessionId)
+      });
 
-      if (sessionId !== uploadSessionIdRef.current) return;
+      if (!store.isAutofillSessionActive(sessionId)) return;
 
-      // 3. Apply canvas preprocessing filters (Grayscale + Contrast stretching + Thresholding)
-      setStatus('Applying image preprocessing filters...');
-      const preprocessedBlob = await preprocessForOCR(processedFile);
-      setExtractionProgress(55);
-
-      if (sessionId !== uploadSessionIdRef.current) return;
-
-      let extractionData;
-      let confMapping: Record<string, number> = {};
-      let isFallback = false;
-      let apiGeneratedContent: any = null;
-
-      // 4. Try API Extraction Gateway
-      try {
-        setStatus('Performing layout-aware extraction...');
-        const formData = new FormData();
-        formData.append('file', preprocessedBlob, file.name.replace(/\.pdf$/i, '.png'));
-        formData.append('fingerprint', fingerprint);
-
-        const response = await fetch('/api/autofill/extract', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('API server unavailable or returned an error.');
-        }
-
-        const resData = await response.json();
-        apiGeneratedContent = resData.generatedContent || null;
-        
-        extractionData = {
-          title: resData.eventTitle || '',
-          batch: resData.audience || 'Students & Faculty',
-          date: resData.date || '',
-          time: resData.time || '',
-          eventType: resData.eventType || '',
-          dressCode: '',
-          specialNote: '',
-          venue: resData.venue || '',
-          department: resData.department || '',
-          speaker: resData.speakers?.map((s: any) => `${s.name} (${s.designation})`).join(', ') || '',
-          coordinator: resData.organizedBy || '',
-          facultyInCharge: '',
-          theme: resData.speakers?.[0]?.designation || '',
-          description: resData.briefDescription || '',
-        };
-
-        confMapping = {
-          title: Math.round((resData.confidence?.eventTitle ?? 1.0) * 100),
-          batch: 90,
-          date: Math.round((resData.confidence?.date ?? 1.0) * 100),
-          time: 90,
-          eventType: 90,
-          venue: Math.round((resData.confidence?.venue ?? 1.0) * 100),
-          department: Math.round((resData.confidence?.department ?? 1.0) * 100),
-          speaker: Math.round((resData.confidence?.speakers ?? 1.0) * 100),
-          coordinator: 90,
-          theme: Math.round((resData.confidence?.speakers ?? 1.0) * 100),
-        };
-
-      } catch (apiErr) {
-        console.warn('Backend autofill service failed, falling back to client-side OCR:', apiErr);
-        isFallback = true;
-      }
-
-      // 5. Fallback Route: Client-side Tesseract OCR + Regex Heuristics
-      if (isFallback) {
-        setStatus('Tesseract OCR parsing (Local Fallback)...');
-        const ocrResult = await runLocalFallbackOCR(preprocessedBlob, lang);
-        
-        if (sessionId !== uploadSessionIdRef.current) return;
-        setExtractionProgress(75);
-        setStatus('Normalizing OCR blocks...');
-
-        const rawText = ocrResult.text;
-        const cleanedText = normalizeOcrText(rawText);
-        const extracted = parsePosterText(cleanedText);
-
-        extractionData = {
-          title: extracted.title || '',
-          batch: extracted.audience || 'Students & Faculty',
-          date: extracted.date || '',
-          time: extracted.time || '',
-          eventType: extracted.eventType || '',
-          dressCode: '',
-          specialNote: '',
-          venue: extracted.venue || '',
-          department: extracted.department || '',
-          speaker: extracted.speaker || '',
-          coordinator: extracted.organizer || '',
-          facultyInCharge: '',
-          theme: extracted.designation || '',
-          description: extracted.description || '',
-        };
-
-        // Compute local confidence scores for visible inputs
-        confMapping = {
-          title: calculateFieldConfidence('eventTitle', extracted.title, cleanedText),
-          batch: 90,
-          date: calculateFieldConfidence('date', extracted.date, cleanedText),
-          time: calculateFieldConfidence('time', extracted.time, cleanedText),
-          eventType: 90,
-          venue: calculateFieldConfidence('venue', extracted.venue, cleanedText),
-          department: calculateFieldConfidence('department', extracted.department, cleanedText),
-          speaker: calculateFieldConfidence('speaker', extracted.speaker, cleanedText),
-          coordinator: calculateFieldConfidence('department', extracted.department, cleanedText),
-          theme: calculateFieldConfidence('speaker', extracted.speaker, cleanedText),
-        };
-      }
-
-      if (sessionId !== uploadSessionIdRef.current) return;
-      
-      setExtractedData(extractionData as any);
-      setFieldConfidence(confMapping);
-      setPredictedData(extractionData as any); // Save copy to trace future user corrections
-      setExtractionProgress(90);
-      setStatus('Generating report templates...');
-
-      const avgConfidence = Object.values(confMapping).reduce((a, b) => a + b, 0) / Object.keys(confMapping).length;
-      setParserConfidence(avgConfidence);
-
-      // Trigger warning message if crucial parameters are low confidence
-      const visibleFields = ['title', 'date', 'time', 'venue', 'department', 'speaker', 'coordinator'];
-      const lowConfidenceCount = visibleFields.filter(f => (confMapping[f] ?? 100) < 70).length;
-      if (lowConfidenceCount >= 3) {
-        setErrorMsg("Multiple fields have low extraction confidence. Please check highlighted inputs manually.");
-      } else {
-        setErrorMsg("");
-      }
-
-      // Step 6 — Generate report switch case parameters
-      setIsGenerating(true);
-      setGenerationProgress(20);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      if (sessionId !== uploadSessionIdRef.current) return;
-      setGenerationProgress(60);
-
-      const parsedForReport = {
-        title: extractionData.title,
-        department: extractionData.department,
-        organizer: extractionData.coordinator,
-        eventType: extractionData.eventType,
-        speaker: extractionData.speaker,
-        designation: extractionData.theme,
-        date: extractionData.date,
-        time: extractionData.time,
-        venue: extractionData.venue,
-        audience: extractionData.batch,
-        description: extractionData.description,
-        confidence: avgConfidence,
-      };
-
-      let report;
-      if (apiGeneratedContent && Object.keys(apiGeneratedContent).length > 0) {
-        report = {
-          title: extractionData.title,
-          objective: apiGeneratedContent.objectiveDescription || '',
-          objectiveDescription: apiGeneratedContent.objectiveDescription || '',
-          eventSummary: apiGeneratedContent.eventSummary || '',
-          highlights: apiGeneratedContent.summaryPoints || [],
-          detailedHighlights: apiGeneratedContent.summaryPoints || [],
-          outcomes: apiGeneratedContent.keyProgramOutcomes || [],
-          attendancePercentage: '',
-          conclusion: '',
-          detailedConclusion: '',
-          participationDetails: ''
-        };
-      } else {
-        report = generateEventReport(parsedForReport);
-      }
-
-      if (sessionId !== uploadSessionIdRef.current) return;
-      setGeneratedReport(report);
+      setExtractionMethod(result.ocrMethod);
+      setExtractedData(result.extractedData as any);
+      setFieldConfidence(result.confidenceMapping);
+      setPredictedData(result.extractedData as any);
+      setGeneratedReport(result.generatedReport);
       setHasGenerated(true);
-      setGenerationProgress(100);
-      setIsGenerating(false);
-      setIsExtracting(false);
+
+      const confValues = Object.values(result.confidenceMapping).filter((val) => val > 0);
+      const avgConf = confValues.length > 0
+        ? confValues.reduce((a, b) => a + b, 0) / confValues.length
+        : 90;
+      setParserConfidence(avgConf);
+
       setExtractionProgress(100);
+      setGenerationProgress(100);
+      setIsExtracting(false);
+      setIsGenerating(false);
       setStatus('Report generated successfully.');
-    } catch (err) {
-      if (sessionId === uploadSessionIdRef.current) {
+    } catch (err: any) {
+      if (err.message === 'STALE_SESSION' || err.name === 'AbortError') {
+        return;
+      }
+      if (store.isAutofillSessionActive(sessionId)) {
         setIsExtracting(false);
         setIsGenerating(false);
-        setErrorMsg("Unable to process the document. Please verify the file and try again.");
+        setExtractionProgress(0);
+        setGenerationProgress(0);
+
+        store.clearReportData();
+
+        if (err.message === 'QUOTA_EXCEEDED') {
+          setVisionStatus('QUOTA_EXCEEDED');
+          setErrorMsg("⚠️ Today's AI limit has been reached. Gemini Auto Fill is temporarily unavailable. Please try again later when the quota resets.");
+        } else if (err.message === 'OFFLINE') {
+          setVisionStatus('OFFLINE');
+          setErrorMsg("⚠️ AI Auto Fill is temporarily unavailable. Please check the connection or try again later.");
+        } else {
+          setVisionStatus('ERROR');
+          setErrorMsg(err.message || "Unable to process the document. Please verify the file and try again.");
+        }
       }
     }
   };
 
   const handlePosterUpload = async (file: File) => {
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
     if (!validTypes.includes(file.type)) {
-      setErrorMsg("Only JPG, PNG, JPEG, and PDF files are supported.");
+      setErrorMsg("Only JPG, PNG, JPEG, WebP, and PDF files are supported.");
       return;
     }
+    
+    resetModalState();
+    const store = useEditorStore.getState();
+    const sessionId = store.startAutofillSession();
+    uploadSessionIdRef.current = sessionId;
+
     setErrorMsg("");
     setFileName(file.name);
 
     try {
-      const sessionId = crypto.randomUUID();
-      uploadSessionIdRef.current = sessionId;
-
-      if (posterPreview) {
-        URL.revokeObjectURL(posterPreview);
-      }
-      setPosterPreview(null);
-      setGeneratedReport(null);
       setCurrentPoster(file);
 
       // Create preview (render first page to canvas if PDF)
@@ -512,8 +410,9 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
         setPosterPreview(previewUrl);
       }
 
-      await processPoster(file, sessionId, ocrLanguage);
+      await processPoster(file, sessionId);
     } catch (error) {
+      if (!store.isAutofillSessionActive(uploadSessionIdRef.current)) return;
       console.error('Poster upload failed:', error);
       setErrorMsg('Unable to parse the uploaded file. Please try again.');
     }
@@ -551,7 +450,8 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
       venue: extractedData.venue,
       audience: extractedData.batch,
       description: extractedData.description,
-      confidence: 100, 
+      confidence: 100,
+      outcomes: generatedReport?.outcomes
     };
 
     const report = generateEventReport(dataToParse);
@@ -567,30 +467,35 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
   const handleApplyDetails = async () => {
     if (!generatedReport) return;
 
-    const speakerName = extractedData.speaker ? extractedData.speaker.split('(')[0].trim() : "";
+    const modalResourcePersons = (extractedData.resourcePersons && extractedData.resourcePersons.length > 0)
+      ? extractedData.resourcePersons
+      : (extractedData.speaker ? [{
+          name: extractedData.speaker.trim(),
+          designation: extractedData.theme || "",
+          organization: extractedData.coordinator || ""
+        }] : []);
+
+    const inputStartDateStr = formatToInputDate(extractedData.eventStartDate || extractedData.date);
+    const inputEndDateStr = formatToInputDate(extractedData.eventEndDate || extractedData.eventStartDate || extractedData.date);
+    const collaborationStr = (extractedData.collaborators || []).join(', ');
+
     const incomingData: EventData = {
       title: extractedData.title,
-      startDate: extractedData.date,
-      endDate: extractedData.date,
+      startDate: inputStartDateStr,
+      endDate: inputEndDateStr || inputStartDateStr,
       venue: extractedData.venue,
+      time: extractedData.time,
       department: extractedData.department,
       organizingBody: extractedData.coordinator,
-      collaboration: '',
+      collaboration: collaborationStr,
       purpose: generatedReport.objective,
       objectiveDescription: generatedReport.objectiveDescription,
       eventSummary: generatedReport.eventSummary,
       summaryPoints: generatedReport.detailedHighlights || generatedReport.highlights || [],
       outcomePoints: generatedReport.outcomes || [],
       attendancePercentage: generatedReport.attendancePercentage || '',
-      conclusion: generatedReport.detailedConclusion || generatedReport.conclusion || '',
       participationDetails: generatedReport.participationDetails || '',
-      resourcePersons: speakerName ? [
-        {
-          name: speakerName,
-          designation: extractedData.theme || "",
-          organization: extractedData.coordinator || ""
-        }
-      ] : [],
+      resourcePersons: modalResourcePersons,
       participantCount: {
         facultyCount: 0,
         studentCount: 0,
@@ -687,14 +592,40 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
           <div>
             <h3 className="text-base font-extrabold text-text-primary leading-tight flex items-center space-x-2">
               <Sparkles className="w-5 h-5 text-accent-primary animate-pulse" />
-              <span>Offline Auto Fill Workspace</span>
-              {isVisionAvailable ? (
-                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold">
-                  AI Vision: Ready
+              <span>Online Auto Fill Workspace</span>
+              {visionStatus === 'ONLINE' && (
+                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI is connected and available for Auto Fill.">
+                  ● Gemini AI Online
                 </Badge>
-              ) : (
-                <Badge variant="outline" className="text-[10px] ml-2 bg-amber-500/10 text-amber-500 border-amber-500/20 font-semibold animate-pulse">
-                  AI Vision: Offline (Using OCR fallback)
+              )}
+              {visionStatus === 'QUOTA_WARNING' && (
+                <Badge variant="warning" className="text-[10px] ml-2 bg-amber-500/10 text-amber-500 border-amber-500/20 font-semibold animate-pulse" title="AI usage limit may be approaching.">
+                  ⚠️ Gemini AI Warning
+                </Badge>
+              )}
+              {visionStatus === 'QUOTA_EXCEEDED' && (
+                <Badge variant="danger" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="Today's AI limit has been reached. Gemini Auto Fill is temporarily unavailable. Please try again later.">
+                  ⚠️ Today's AI limit has been reached
+                </Badge>
+              )}
+              {visionStatus === 'PROCESSING' && (
+                <Badge variant="info" className="text-[10px] ml-2 bg-sky-500/10 text-sky-500 border-sky-500/20 font-semibold animate-pulse" title="Extracting poster details and generating report content.">
+                  ◌ Gemini AI Processing…
+                </Badge>
+              )}
+              {visionStatus === 'OFFLINE' && (
+                <Badge variant="outline" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="AI Auto Fill is temporarily unavailable. Please check the connection or try again later.">
+                  ● Gemini AI Offline
+                </Badge>
+              )}
+              {visionStatus === 'ERROR' && (
+                <Badge variant="outline" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="An extraction error occurred.">
+                  ● Gemini AI Error
+                </Badge>
+              )}
+              {visionStatus === 'loading' && (
+                <Badge variant="outline" className="text-[10px] ml-2 bg-slate-500/10 text-slate-500 border-slate-500/20 font-semibold animate-pulse">
+                  Checking AI Status...
                 </Badge>
               )}
             </h3>
@@ -758,7 +689,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                       <img 
                         src={posterPreview} 
                         alt="Uploaded Flyer" 
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain bg-slate-900/40"
                       />
                     )}
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -790,7 +721,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                       if (currentPoster) {
                         const sessionId = crypto.randomUUID();
                         uploadSessionIdRef.current = sessionId;
-                        processPoster(currentPoster, sessionId, newLang);
+                        processPoster(currentPoster, sessionId);
                       }
                     }}
                     className="w-full bg-surface-secondary border border-surface-tertiary rounded-xl p-2 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
@@ -799,9 +730,16 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                   </select>
                 </div>
 
-                <div className="flex items-center space-x-2 text-[10px] text-emerald-500 font-bold bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
-                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                  <span>Document recognized</span>
+                <div className="flex flex-col space-y-1 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
+                  <div className="flex items-center space-x-2 text-[10px] text-emerald-500 font-bold">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <span>Document recognized</span>
+                  </div>
+                  {extractionMethod && (
+                    <span className="text-[9px] text-emerald-500/80 font-mono pl-6">
+                      Method: {extractionMethod}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -853,110 +791,107 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                   </div>
                 )}
 
-                {/* Scrollable editable extraction fields */}
+                {/* Scrollable editable extraction fields directly matching KPRCAS Report fields */}
                 <div className="space-y-3.5 max-h-[50vh] lg:max-h-none overflow-y-visible">
                   <div>
                     <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Event Title</label>
                     <input
                       type="text"
-                      value={extractedData.title}
+                      value={extractedData.title || ''}
                       onChange={(e) => setExtractedData(prev => ({ ...prev, title: e.target.value }))}
                       className={getInputClass('title', extractedData.title)}
+                      placeholder="e.g. HACK TO PATENT: TRANSFORMING IDEAS INTO IP"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Audience</label>
+                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Organizing Body</label>
                       <input
                         type="text"
-                        value={extractedData.batch}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, batch: e.target.value }))}
-                        className={getInputClass('batch', extractedData.batch)}
+                        value={extractedData.coordinator || ''}
+                        onChange={(e) => setExtractedData(prev => ({ ...prev, coordinator: e.target.value }))}
+                        className={getInputClass('coordinator', extractedData.coordinator)}
+                        placeholder="e.g. School of Computing Science"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Event Type</label>
+                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Organizing Department</label>
                       <input
                         type="text"
-                        value={extractedData.eventType}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, eventType: e.target.value }))}
-                        className={getInputClass('eventType', extractedData.eventType)}
+                        value={extractedData.department || ''}
+                        onChange={(e) => setExtractedData(prev => ({ ...prev, department: e.target.value }))}
+                        className={getInputClass('department', extractedData.department)}
+                        placeholder="e.g. Department of Information Technology"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Date</label>
+                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Collaborations (If any)</label>
                       <input
                         type="text"
-                        value={extractedData.date}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, date: e.target.value }))}
+                        value={Array.isArray(extractedData.collaborators) ? extractedData.collaborators.join(', ') : ''}
+                        onChange={(e) => setExtractedData(prev => ({ ...prev, collaborators: e.target.value ? e.target.value.split(',').map(s => s.trim()) : [] }))}
+                        className="w-full bg-surface-secondary border border-surface-tertiary rounded-xl p-2 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
+                        placeholder="Leave empty if none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Total Students Participated</label>
+                      <input
+                        type="text"
+                        value=""
+                        disabled
+                        className="w-full bg-surface-secondary/50 border border-surface-tertiary rounded-xl p-2 text-xs text-text-muted cursor-not-allowed"
+                        placeholder="Leave empty (Fill after event)"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Details of Resource Person</label>
+                    <input
+                      type="text"
+                      value={extractedData.speaker || ''}
+                      onChange={(e) => setExtractedData(prev => ({ ...prev, speaker: e.target.value }))}
+                      className={getInputClass('speaker', extractedData.speaker)}
+                      placeholder="e.g. Mr. N. Mathimurugan, M.E., Ph.D., Co-founder & CEO, SM AI Mojo Tech, Coimbatore"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Event Date</label>
+                      <input
+                        type="text"
+                        value={extractedData.eventStartDate || extractedData.date || ''}
+                        onChange={(e) => setExtractedData(prev => ({ ...prev, date: e.target.value, eventStartDate: e.target.value }))}
                         className={getInputClass('date', extractedData.date)}
+                        placeholder="DD-MM-YYYY"
                       />
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Time</label>
                       <input
                         type="text"
-                        value={extractedData.time}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, time: e.target.value }))}
+                        value={extractedData.eventStartTime || extractedData.time || ''}
+                        onChange={(e) => setExtractedData(prev => ({ ...prev, time: e.target.value, eventStartTime: e.target.value }))}
                         className={getInputClass('time', extractedData.time)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Department</label>
-                      <input
-                        type="text"
-                        value={extractedData.department}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, department: e.target.value }))}
-                        className={getInputClass('department', extractedData.department)}
+                        placeholder="11:00 a.m."
                       />
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Venue</label>
                       <input
                         type="text"
-                        value={extractedData.venue}
+                        value={extractedData.venue || ''}
                         onChange={(e) => setExtractedData(prev => ({ ...prev, venue: e.target.value }))}
                         className={getInputClass('venue', extractedData.venue)}
+                        placeholder="Lecture Hall"
                       />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Speaker / Guest</label>
-                      <input
-                        type="text"
-                        value={extractedData.speaker}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, speaker: e.target.value }))}
-                        className={getInputClass('speaker', extractedData.speaker)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Designation</label>
-                      <input
-                        type="text"
-                        value={extractedData.theme}
-                        onChange={(e) => setExtractedData(prev => ({ ...prev, theme: e.target.value }))}
-                        className={getInputClass('theme', extractedData.theme)}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-text-secondary uppercase block mb-1">Organizer / Body</label>
-                    <input
-                      type="text"
-                      value={extractedData.coordinator}
-                      onChange={(e) => setExtractedData(prev => ({ ...prev, coordinator: e.target.value }))}
-                      className={getInputClass('coordinator', extractedData.coordinator)}
-                    />
                   </div>
 
                   <div>
@@ -1001,15 +936,15 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
               <Badge variant="purple">Report Sheet</Badge>
             </div>
 
-            {isGenerating ? (
+            {isExtracting || isGenerating ? (
               <div className="flex-1 flex flex-col items-center justify-center py-20 text-center space-y-4">
-                <Loader2 className="w-10 h-10 text-accent-secondary animate-spin" />
+                <Loader2 className="w-10 h-10 text-accent-primary animate-spin" />
                 <div className="space-y-1">
-                  <h5 className="text-xs font-bold text-text-primary">{status}</h5>
-                  <p className="text-[10px] text-text-muted">Structuring document text...</p>
+                  <h5 className="text-xs font-bold text-text-primary">{status || 'Analyzing document details...'}</h5>
+                  <p className="text-[10px] text-text-muted">Extracting fields & structuring document layout...</p>
                 </div>
-                <div className="w-full max-w-[200px] h-1 bg-surface-tertiary rounded-full overflow-hidden">
-                  <div className="bg-accent-secondary h-full transition-all duration-300" style={{ width: `${generationProgress}%` }} />
+                <div className="w-full max-w-[200px] h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
+                  <div className="bg-accent-primary h-full transition-all duration-300" style={{ width: `${Math.max(15, extractionProgress || generationProgress)}%` }} />
                 </div>
               </div>
             ) : !generatedReport ? (
@@ -1024,7 +959,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
               /* Actual Dynamic KprcasTemplate Container scaled down to fit the preview panel */
               <div className="w-full overflow-y-auto flex-1 flex flex-col items-center py-2 select-text">
                 <KprcasTemplate 
-                  data={previewData}
+                  data={storeData}
                   styling={storeStyling}
                   layoutConfig={storeLayoutConfig}
                   sections={storeSections}
@@ -1038,9 +973,6 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
         {/* Action Bottom Bar */}
         <div className="p-4 border-t border-surface-tertiary/60 bg-surface-secondary flex items-center justify-end space-x-3 flex-shrink-0">
-          <Button onClick={handleClose} variant="secondary" size="sm" className="px-4 py-2 text-xs">
-            Cancel
-          </Button>
           <Button 
             onClick={handleApplyDetails} 
             disabled={!hasGenerated}
@@ -1048,7 +980,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
             size="sm" 
             className="px-6 py-2 text-xs font-extrabold shadow-md shadow-accent-primary/20 flex items-center space-x-1.5"
           >
-            <span>Apply to Editor</span>
+            <span>Done</span>
             <ChevronRight className="w-4 h-4 text-white" />
           </Button>
         </div>

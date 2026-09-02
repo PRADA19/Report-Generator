@@ -10,6 +10,7 @@ import { A4PreviewContainer } from '../components/CenterPanel/A4PreviewContainer
 import { useBreakpoint } from '../../../hooks/useBreakpoint';
 import { ThemeToggle } from '../../../components/ui/ThemeToggle';
 import { Button } from '../../../components/ui/Button';
+import { exportService } from '../../../services/export/exportService';
 
 export const CreateReportPage: React.FC = () => {
   const { data, resetToTemplateDefaults } = useEditorStore();
@@ -111,7 +112,7 @@ export const CreateReportPage: React.FC = () => {
         </Button>
         
         <Button 
-          onClick={() => window.print()}
+          onClick={() => exportService.exportToPdf({ fileName: `${(data.title || 'Event_Report').replace(/[^a-zA-Z0-9\s_-]/g, '').trim().toLowerCase().replace(/\s+/g, '_')}.pdf` })}
           size="sm"
           variant="primary"
           className="shadow-md shadow-accent-primary/20 font-bold"

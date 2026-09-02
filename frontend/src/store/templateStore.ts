@@ -30,27 +30,24 @@ const DEFAULT_TEMPLATES: TemplateItem[] = [
     name: 'KPRCAS Event Template',
     department: 'IQAC',
     eventType: 'Workshop',
-    currentVersion: 'Version 1',
+    currentVersion: 'Version 2',
     versions: [
       {
-        version: 'Version 1',
+        version: 'Version 2',
         createdAt: new Date().toISOString(),
         sections: [
           { id: 'kpr1', name: 'Header & Approval', type: 'Text', required: true },
           { id: 'kpr2', name: 'Event Purpose', type: 'Paragraph', required: true },
-          { id: 'kpr3', name: 'Resource Persons', type: 'Table', required: true },
-          { id: 'kpr4', name: 'Participant Details', type: 'Table', required: true },
-          { id: 'kpr5', name: 'Summary & Highlights', type: 'Rich Text', required: true },
-          { id: 'kpr6', name: 'Learning Outcomes', type: 'Paragraph', required: true },
-          { id: 'kpr7', name: 'Concluding Remarks', type: 'Paragraph', required: true },
-          { id: 'kpr8', name: 'Geotagged Photographs', type: 'Image Upload', required: true }
+          { id: 'kpr3', name: 'Summary & Highlights', type: 'Rich Text', required: true },
+          { id: 'kpr4', name: 'Learning Outcomes', type: 'Paragraph', required: true },
+          { id: 'kpr5', name: 'Geotagged Photographs', type: 'Image Upload', required: true }
         ]
       }
     ],
     status: 'Active',
-    description: 'Official IQAC accredited event report template for KPRCAS institutional events.',
-    sectionsCount: 8,
-    sectionsList: ['Approval Header', 'Purpose', 'Resource Persons', 'Participants', 'Summary', 'Outcomes', 'Concluding Remarks', 'Geotagged Photos'],
+    description: 'Official KPRCAS Event Report template (Quality System Document, Version 2).',
+    sectionsCount: 5,
+    sectionsList: ['Approval Header', 'Purpose', 'Summary', 'Outcomes', 'Geotagged Photos'],
     lastUsed: new Date().toISOString(),
     lastUpdated: new Date().toISOString().split('T')[0],
     isDefault: true

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { 
   Award, 
@@ -6,8 +6,6 @@ import {
   Users, 
   BookOpen, 
   ListOrdered, 
-  CheckCircle, 
-  FileCheck, 
   Camera, 
   FileText, 
   Plus, 
@@ -25,12 +23,14 @@ import {
   LayoutList
 } from 'lucide-react';
 import { AiAutofillModal } from '../../../../components/editor/AiAutofillModal';
+import type { HeaderConfig } from '../../../../types/editor';
 import { Input } from '../../../../components/ui/Input';
 import { Textarea } from '../../../../components/ui/Textarea';
 import { Button } from '../../../../components/ui/Button';
 import { Select } from '../../../../components/ui/Select';
 import { EditorAccordionSection } from './EditorAccordionSection';
 import { SectionList } from './SectionList';
+import { PhotoLayoutModal } from './PhotoLayoutModal';
 
 export const EditorSidebar: React.FC = () => {
   const {
@@ -47,9 +47,6 @@ export const EditorSidebar: React.FC = () => {
     addSummaryPoint,
     removeSummaryPoint,
     updateSummaryPoint,
-    addOutcomePoint,
-    removeOutcomePoint,
-    updateOutcomePoint,
     addImage,
     updateImage,
     removeImage,
@@ -72,12 +69,12 @@ export const EditorSidebar: React.FC = () => {
 
   // Header configuration mapped from the store state
   const headerConfig = data.header || {
-    institutionName: "KPR College of Arts and Science",
+    institutionName: "KPR College of Arts Science and Research",
     department: data.department || "",
     logo: "",
-    details: "(Autonomous) | Affiliated to Bharathiar University",
-    address: "Avinashi Road, Arasur, Coimbatore - 641407",
-    text: "Internal Quality Assurance Cell (IQAC)"
+    details: "(Affiliated to Bharathiar University, Coimbatore)",
+    address: "Avinashi Road, Arasur, Coimbatore – 641 407",
+    text: "Quality System Document"
   };
   const updateHeaderField = (field: string, val: string) => {
     updateDataField('header', {
@@ -101,6 +98,7 @@ export const EditorSidebar: React.FC = () => {
 
   // AI Autofill State
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const imageUploadRef = useRef<HTMLInputElement>(null);
 
   const handleResetOrder = () => {
@@ -124,68 +122,56 @@ export const EditorSidebar: React.FC = () => {
   };
 
   const layoutTitle = (
-    <div className="flex flex-col text-left leading-none space-y-[1px]">
-      <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">Structure</span>
-      <span className="text-[10px] font-black uppercase tracking-wider text-text-primary">Layout</span>
-    </div>
+    <span className="text-[10px] font-black uppercase tracking-wider text-text-primary whitespace-nowrap">Structure & Layout</span>
   );
-
-  // Key Program Outcomes checklist local state
-  const [checkedPOs, setCheckedPOs] = useState<Record<string, boolean>>({
-    'po1': true,
-    'po2': true,
-    'po5': true
-  });
 
   // Mock Event type state
   const [eventType, setEventType] = useState<string>('Workshop');
-
-
-
-  const programOutcomes = [
-    { id: 'po1', label: 'PO1: Academic & Subject Knowledge' },
-    { id: 'po2', label: 'PO2: Critical Problem Analysis' },
-    { id: 'po3', label: 'PO3: Scientific Research & Design' },
-    { id: 'po4', label: 'PO4: Modern Technical Tools' },
-    { id: 'po5', label: 'PO5: Societal & Environmental Impact' },
-    { id: 'po6', label: 'PO6: Professional & Academic Ethics' },
-    { id: 'po7', label: 'PO7: Collaborative Team Work' },
-    { id: 'po8', label: 'PO8: Communication & Presentation' },
-    { id: 'po9', label: 'PO9: Project Finance Management' },
-    { id: 'po10', label: 'PO10: Life-long Learning Competency' },
-    { id: 'po11', label: 'PO11: Interdisciplinary Adaptability' },
-    { id: 'po12', label: 'PO12: Innovation & Incubation Setup' }
-  ];
 
   const handleToggleSection = (section: string) => {
     setOpenSection(prev => prev === section ? '' : section);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Auto-pop layout selection modal when photograph count increases to 2 or more
+  const prevPhotoCountRef = useRef(data.images.length);
+  useEffect(() => {
+    if (data.images.length >= 2 && data.images.length !== prevPhotoCountRef.current) {
+      setIsPhotoModalOpen(true);
+    }
+    prevPhotoCountRef.current = data.images.length;
+  }, [data.images.length]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const file = files[0];
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          addImage(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
+      const fileList = Array.from(files);
+      const readPromises = fileList.map(file => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+              resolve(reader.result);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const urls = await Promise.all(readPromises);
+      urls.forEach(url => addImage(url));
+
+      const updatedTotal = data.images.length + urls.length;
+      if (updatedTotal >= 2) {
+        setIsPhotoModalOpen(true);
+      }
     }
+    e.target.value = '';
   };
 
   const handleParticipantChange = (field: 'facultyCount' | 'studentCount' | 'externalCount', val: number) => {
     const currentCounts = { ...data.participantCount, [field]: val };
     const total = currentCounts.facultyCount + currentCounts.studentCount + currentCounts.externalCount;
     updateDataField('participantCount', { ...currentCounts, total });
-  };
-
-  const handleTogglePO = (id: string) => {
-    setCheckedPOs(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
   };
 
   const fontOptions = [
@@ -278,6 +264,190 @@ export const EditorSidebar: React.FC = () => {
             className="resize-y min-h-[72px]"
             placeholder="e.g. Guest Lecture on Cloud Infrastructure Security"
           />
+
+          {/* Institution Logo Image Upload */}
+          <div className="space-y-1 pt-2 border-t border-surface-tertiary/40 mt-3">
+            <label className="text-[10px] font-extrabold text-text-secondary uppercase tracking-wider block mb-1">
+              Top Institution Logo
+            </label>
+            <div className="flex items-center space-x-2">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    const url = URL.createObjectURL(file);
+                    updateDataField('header', {
+                      institutionName: data.header?.institutionName || "KPR College of Arts Science and Research",
+                      department: data.header?.department || data.department || "",
+                      details: data.header?.details || "",
+                      address: data.header?.address || "",
+                      text: data.header?.text || "",
+                      logo: url
+                    });
+                  }
+                }}
+                className="text-xs text-text-muted file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-accent-primary/10 file:text-accent-primary hover:file:bg-accent-primary/20 cursor-pointer"
+              />
+              {data.header?.logo && (
+                <button
+                  type="button"
+                  onClick={() => updateDataField('header', {
+                    institutionName: data.header?.institutionName || "KPR College of Arts Science and Research",
+                    department: data.header?.department || data.department || "",
+                    details: data.header?.details || "",
+                    address: data.header?.address || "",
+                    text: data.header?.text || "",
+                    logo: ''
+                  })}
+                  className="text-[10px] text-red-500 hover:underline font-semibold"
+                >
+                  Reset Logo
+                </button>
+              )}
+            </div>
+          </div>
+        </EditorAccordionSection>
+
+        {/* LOGO OPTIONS ACCORDION */}
+        <EditorAccordionSection 
+          id="logo"
+          title="Logo Options"
+          icon={Maximize}
+          isOpen={openSection === 'logo'}
+          onToggle={() => handleToggleSection('logo')}
+        >
+          <div className="space-y-3">
+            {/* Active Logo Display & Preview */}
+            <div className="flex flex-col items-center justify-center p-3 bg-surface-primary border border-surface-tertiary rounded-xl relative group">
+              <span className="text-[9px] font-bold text-text-secondary uppercase mb-2">Active Institution Logo</span>
+              <div className="h-16 flex items-center justify-center p-1 bg-white rounded border border-slate-200 w-full">
+                <img 
+                  src={data.header?.logo || '/kprcas_logo.png'} 
+                  alt="Active Logo" 
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+              <span className="text-[9px] text-text-muted mt-1 font-mono">
+                {data.header?.logo && data.header.logo !== '/kprcas_logo.png' ? 'Custom Uploaded Logo' : 'Default (Learn Beyond)'}
+              </span>
+            </div>
+
+            {/* Upload & Reset Buttons */}
+            <div className="flex items-center space-x-2 pt-1">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    const url = URL.createObjectURL(file);
+                    updateDataField('header', {
+                      institutionName: "KPR College of Arts Science and Research",
+                      department: "School of Computing Science",
+                      logo: url,
+                      ...data.header
+                    } as HeaderConfig);
+                  }
+                }}
+                className="hidden"
+                id="sidebar-logo-upload-input"
+              />
+              <label 
+                htmlFor="sidebar-logo-upload-input"
+                className="flex-1 py-1.5 px-2 bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary font-bold text-[10px] rounded-xl text-center cursor-pointer border border-accent-primary/20 transition-all flex items-center justify-center space-x-1"
+              >
+                <Upload className="w-3 h-3" />
+                <span>Upload New Logo</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => updateDataField('header', {
+                  institutionName: "KPR College of Arts Science and Research",
+                  department: "School of Computing Science",
+                  ...data.header,
+                  logo: '/kprcas_logo.png'
+                } as HeaderConfig)}
+                className="py-1.5 px-2 bg-surface-tertiary hover:bg-surface-secondary text-text-secondary font-bold text-[10px] rounded-xl text-center border border-surface-tertiary transition-all"
+              >
+                Reset Default
+              </button>
+            </div>
+
+            {/* Dimensions Sliders */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-surface-tertiary">
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[9px] font-bold text-text-secondary">
+                  <span>Width</span>
+                  <span className="font-mono text-text-primary">{styling.logoWidthPx || 120}px</span>
+                </div>
+                <input
+                  type="number"
+                  min="30"
+                  max="250"
+                  value={styling.logoWidthPx || 120}
+                  onChange={(e) => updateStyling({ logoWidthPx: parseInt(e.target.value) || 120 })}
+                  className="w-full bg-surface-primary border border-surface-tertiary rounded-xl p-1.5 text-center text-xs text-text-primary"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[9px] font-bold text-text-secondary">
+                  <span>Height</span>
+                  <span className="font-mono text-text-primary">{styling.logoHeightPx || 50}px</span>
+                </div>
+                <input
+                  type="number"
+                  min="20"
+                  max="200"
+                  value={styling.logoHeightPx || 50}
+                  onChange={(e) => updateStyling({ logoHeightPx: parseInt(e.target.value) || 50 })}
+                  className="w-full bg-surface-primary border border-surface-tertiary rounded-xl p-1.5 text-center text-xs text-text-primary"
+                />
+              </div>
+            </div>
+
+            {/* Position Alignment Buttons */}
+            <div className="space-y-1.5 pt-1 border-t border-surface-tertiary">
+              <label className="text-[10px] font-extrabold text-text-secondary uppercase tracking-wider block">Logo Alignment</label>
+              <div className="flex bg-bg-secondary p-1 rounded-xl border border-surface-tertiary">
+                <button
+                  type="button"
+                  onClick={() => updateStyling({ logoPosition: 'left' })}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                    (styling.logoPosition || 'left') === 'left' 
+                      ? 'bg-surface-primary text-text-primary shadow-sm' 
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Left
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyling({ logoPosition: 'center' })}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                    styling.logoPosition === 'center' 
+                      ? 'bg-surface-primary text-text-primary shadow-sm' 
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Center
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStyling({ logoPosition: 'right' })}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                    styling.logoPosition === 'right' 
+                      ? 'bg-surface-primary text-text-primary shadow-sm' 
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Right
+                </button>
+              </div>
+            </div>
+          </div>
         </EditorAccordionSection>
 
         {/* 2. STRUCTURE & LAYOUT */}
@@ -506,7 +676,7 @@ export const EditorSidebar: React.FC = () => {
         {/* 3. HEADER */}
         <EditorAccordionSection
           id="headers"
-          title="Header"
+          title="Header Options"
           icon={LayoutList}
           isOpen={openSection === 'headers'}
           onToggle={() => handleToggleSection('headers')}
@@ -517,14 +687,31 @@ export const EditorSidebar: React.FC = () => {
               type="text"
               value={headerConfig.institutionName}
               onChange={(e) => updateHeaderField('institutionName', e.target.value)}
-              placeholder="e.g. KPR College of Arts and Science"
+              placeholder="e.g. KPR College of Arts Science and Research"
+            />
+            <Input
+              label="Header Title / Document Title"
+              type="text"
+              value={headerConfig.documentTitle || headerConfig.text || ''}
+              onChange={(e) => {
+                updateHeaderField('documentTitle', e.target.value);
+                updateHeaderField('text', e.target.value);
+              }}
+              placeholder="e.g. Quality System Document"
+            />
+            <Input
+              label="Header Sub-Title / Report Title"
+              type="text"
+              value={headerConfig.reportTitle || ''}
+              onChange={(e) => updateHeaderField('reportTitle', e.target.value)}
+              placeholder="e.g. Report of the Event"
             />
             <Input
               label="Sub-header / Affiliation Details"
               type="text"
               value={headerConfig.details || ''}
               onChange={(e) => updateHeaderField('details', e.target.value)}
-              placeholder="e.g. (Autonomous) | Affiliated to Bharathiar University"
+              placeholder="e.g. (Affiliated to Bharathiar University, Coimbatore)"
             />
             <Input
               label="Institution Address"
@@ -532,13 +719,6 @@ export const EditorSidebar: React.FC = () => {
               value={headerConfig.address || ''}
               onChange={(e) => updateHeaderField('address', e.target.value)}
               placeholder="e.g. Avinashi Road, Arasur, Coimbatore - 641407"
-            />
-            <Input
-              label="Header Authority Title"
-              type="text"
-              value={headerConfig.text || ''}
-              onChange={(e) => updateHeaderField('text', e.target.value)}
-              placeholder="e.g. Internal Quality Assurance Cell (IQAC)"
             />
             <Input
               label="Logo URL / Base64"
@@ -556,21 +736,21 @@ export const EditorSidebar: React.FC = () => {
                   updateDataField('department', e.target.value);
                   updateHeaderField('department', e.target.value);
                 }}
-                placeholder="e.g. CSE"
+                placeholder="e.g. Department of Information Technology"
               />
               <Input
                 label="Organizing Body"
                 type="text"
                 value={data.organizingBody}
                 onChange={(e) => updateDataField('organizingBody', e.target.value)}
-                placeholder="e.g. Association of CSE"
+                placeholder="e.g. Association of Information Technology"
               />
               <Input
                 label="Collaboration / Sponsors"
                 type="text"
                 value={data.collaboration}
                 onChange={(e) => updateDataField('collaboration', e.target.value)}
-                placeholder="e.g. AWS Academy / ICT Academy"
+                placeholder="e.g. IEEE / ACM Chapter"
               />
             </div>
           </div>
@@ -670,6 +850,14 @@ export const EditorSidebar: React.FC = () => {
             value={data.venue}
             onChange={(e) => updateDataField('venue', e.target.value)}
             placeholder="e.g. Seminar Hall, CSE Block"
+          />
+
+          <Input
+            label="Event Time"
+            type="text"
+            value={data.time || ''}
+            onChange={(e) => updateDataField('time', e.target.value)}
+            placeholder="e.g. 10:00 AM to 04:30 PM"
           />
 
           <div className="space-y-1">
@@ -831,91 +1019,6 @@ export const EditorSidebar: React.FC = () => {
           </div>
         </EditorAccordionSection>
 
-        {/* 6. EVENT OUTCOMES */}
-        <EditorAccordionSection 
-          id="outcomes"
-          title="Event Outcomes"
-          icon={CheckCircle}
-          isOpen={openSection === 'outcomes'}
-          onToggle={() => handleToggleSection('outcomes')}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">Outcome list</span>
-            <Button
-              onClick={addOutcomePoint}
-              size="sm"
-              className="p-1.5 rounded-xl text-text-primary"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            {data.outcomePoints.map((pt, idx) => (
-              <div key={idx} className="flex items-start space-x-2 bg-surface-primary border border-surface-tertiary p-2 rounded-2xl relative group hover:shadow-sm transition-all duration-200 theme-transition">
-                <span className="text-[10px] text-text-muted font-mono mt-3 ml-1 flex-shrink-0">#{idx + 1}</span>
-                <Textarea
-                  value={pt}
-                  onChange={(e) => updateOutcomePoint(idx, e.target.value)}
-                  placeholder="Key outcome bullet..."
-                  className="flex-1 bg-surface-primary min-h-[50px] text-xs p-1"
-                />
-                <Button
-                  onClick={() => removeOutcomePoint(idx)}
-                  variant="danger"
-                  className="p-2 rounded-xl mt-1 flex-shrink-0"
-                >
-                  <Trash className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        </EditorAccordionSection>
-
-        {/* 6.5. CONCLUSION */}
-        <EditorAccordionSection 
-          id="conclusion"
-          title="Concluding Remarks"
-          icon={CheckCircle}
-          isOpen={openSection === 'conclusion'}
-          onToggle={() => handleToggleSection('conclusion')}
-        >
-          <Textarea
-            label="Concluding Paragraph"
-            value={data.conclusion || ''}
-            onChange={(e) => updateDataField('conclusion', e.target.value)}
-            className="resize-y min-h-[90px]"
-            placeholder="State the concluding results and feedback summaries..."
-          />
-        </EditorAccordionSection>
-
-        {/* 7. KEY PROGRAM OUTCOMES */}
-        <EditorAccordionSection 
-          id="po"
-          title="Key Program Outcomes"
-          icon={FileCheck}
-          isOpen={openSection === 'po'}
-          onToggle={() => handleToggleSection('po')}
-        >
-          <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase block">Select Target PO Map</span>
-          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-            {programOutcomes.map((po) => (
-              <label 
-                key={po.id}
-                className="flex items-center space-x-2.5 bg-surface-primary hover:bg-surface-secondary border border-surface-tertiary p-2 rounded-xl text-[11px] font-semibold text-text-secondary cursor-pointer select-none"
-              >
-                <input 
-                  type="checkbox"
-                  checked={!!checkedPOs[po.id]}
-                  onChange={() => handleTogglePO(po.id)}
-                  className="w-4 h-4 rounded text-accent-primary focus:ring-accent-primary border-surface-tertiary cursor-pointer accent-accent-primary"
-                />
-                <span className={checkedPOs[po.id] ? "text-text-primary font-bold" : ""}>{po.label}</span>
-              </label>
-            ))}
-          </div>
-        </EditorAccordionSection>
-
         {/* 8. EVENT PHOTOGRAPHS */}
         <EditorAccordionSection 
           id="photos"
@@ -930,18 +1033,35 @@ export const EditorSidebar: React.FC = () => {
             ref={imageUploadRef}
             onChange={handleImageUpload}
             accept="image/*"
+            multiple
             className="hidden"
           />
 
-          {/* Upload Trigger Area */}
-          <button
-            onClick={() => imageUploadRef.current?.click()}
-            className="w-full flex flex-col items-center justify-center border border-dashed border-surface-tertiary hover:border-accent-primary bg-surface-primary rounded-2xl p-4 hover:bg-surface-secondary transition-all cursor-pointer group shadow-sm text-center"
-          >
-            <Upload className="w-4 h-4 text-accent-primary mb-1 group-hover:scale-110 transition-transform" />
-            <span className="text-[11px] font-bold text-text-primary">Upload Event Photo</span>
-            <span className="text-[9px] text-text-muted mt-0.5">Geo-tagged A4 prints | Max 5MB</span>
-          </button>
+          {/* Upload & Choose Layout Buttons */}
+          <div className="space-y-2">
+            <button
+              onClick={() => imageUploadRef.current?.click()}
+              className="w-full flex flex-col items-center justify-center border border-dashed border-surface-tertiary hover:border-accent-primary bg-surface-primary rounded-2xl p-3.5 hover:bg-surface-secondary transition-all cursor-pointer group shadow-sm text-center"
+            >
+              <Upload className="w-4 h-4 text-accent-primary mb-1 group-hover:scale-110 transition-transform" />
+              <span className="text-[11px] font-bold text-text-primary">Upload Event Photo</span>
+              <span className="text-[9px] text-text-muted mt-0.5">Geo-tagged A4 prints | Max 5MB</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsPhotoModalOpen(true)}
+              className="w-full py-2 px-3 bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary font-bold text-xs rounded-xl text-center border border-accent-primary/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-accent-primary" />
+              <span>Choose Photo Layout ({data.images.length} photos)</span>
+            </button>
+          </div>
+
+          <PhotoLayoutModal
+            isOpen={isPhotoModalOpen}
+            onClose={() => setIsPhotoModalOpen(false)}
+          />
 
           <div className="space-y-4 mt-2">
             {data.images.map((img) => (
@@ -981,23 +1101,110 @@ export const EditorSidebar: React.FC = () => {
                     />
                   </div>
 
-                  {/* Width slider */}
-                  <div className="space-y-1 bg-surface-primary p-2 rounded border border-surface-tertiary">
-                    <div className="flex items-center justify-between text-[9px] font-bold text-text-secondary">
-                      <span className="flex items-center space-x-1">
-                        <Sliders className="w-3 h-3 text-text-muted" />
-                        <span>Display Width</span>
-                      </span>
-                      <span className="font-mono text-text-primary">{img.widthPercent}%</span>
+                  {/* Independent Photo Size Controls */}
+                  <div className="space-y-2 bg-surface-primary p-2.5 rounded-xl border border-surface-tertiary">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-bold text-text-secondary uppercase tracking-wider">Photo Size Presets</span>
+                      <button 
+                        type="button"
+                        onClick={() => updateImage(img.id, { widthPercent: 100, heightPx: 160 })}
+                        className="text-[9px] text-accent-primary hover:underline font-bold"
+                      >
+                        Reset Size
+                      </button>
                     </div>
-                    <input
-                      type="range"
-                      min="20"
-                      max="100"
-                      value={img.widthPercent}
-                      onChange={(e) => updateImage(img.id, { widthPercent: parseInt(e.target.value) })}
-                      className="w-full h-1 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
-                    />
+
+                    {/* Presets: Small, Medium, Large */}
+                    <div className="grid grid-cols-3 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateImage(img.id, { widthPercent: 40, heightPx: 120 })}
+                        className={`py-1 text-[9px] font-bold rounded-lg border transition-all ${
+                          img.widthPercent === 40 
+                            ? 'bg-accent-primary text-white border-accent-primary shadow-sm' 
+                            : 'bg-surface-primary text-text-secondary border-surface-tertiary hover:border-accent-primary/50'
+                        }`}
+                      >
+                        Small (40%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateImage(img.id, { widthPercent: 70, heightPx: 160 })}
+                        className={`py-1 text-[9px] font-bold rounded-lg border transition-all ${
+                          img.widthPercent === 70 
+                            ? 'bg-accent-primary text-white border-accent-primary shadow-sm' 
+                            : 'bg-surface-primary text-text-secondary border-surface-tertiary hover:border-accent-primary/50'
+                        }`}
+                      >
+                        Medium (70%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateImage(img.id, { widthPercent: 100, heightPx: 220 })}
+                        className={`py-1 text-[9px] font-bold rounded-lg border transition-all ${
+                          img.widthPercent === 100 
+                            ? 'bg-accent-primary text-white border-accent-primary shadow-sm' 
+                            : 'bg-surface-primary text-text-secondary border-surface-tertiary hover:border-accent-primary/50'
+                        }`}
+                      >
+                        Large (100%)
+                      </button>
+                    </div>
+
+                    {/* Width Scale Slider & Step [-] / [+] */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between text-[9px] font-bold text-text-secondary">
+                        <span className="flex items-center space-x-1">
+                          <Sliders className="w-3 h-3 text-text-muted" />
+                          <span>Width Scale</span>
+                        </span>
+                        <div className="flex items-center space-x-1">
+                          <button 
+                            type="button"
+                            onClick={() => updateImage(img.id, { widthPercent: Math.max(20, (img.widthPercent || 100) - 10) })}
+                            className="px-1.5 py-0.5 rounded bg-surface-tertiary hover:bg-surface-secondary text-text-primary text-[10px] font-bold"
+                            title="Decrease width"
+                          >
+                            -
+                          </button>
+                          <span className="font-mono text-text-primary w-8 text-center">{img.widthPercent || 100}%</span>
+                          <button 
+                            type="button"
+                            onClick={() => updateImage(img.id, { widthPercent: Math.min(100, (img.widthPercent || 100) + 10) })}
+                            className="px-1.5 py-0.5 rounded bg-surface-tertiary hover:bg-surface-secondary text-text-primary text-[10px] font-bold"
+                            title="Increase width"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min="20"
+                        max="100"
+                        step="5"
+                        value={img.widthPercent || 100}
+                        onChange={(e) => updateImage(img.id, { widthPercent: parseInt(e.target.value) })}
+                        className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+                      />
+                    </div>
+
+                    {/* Container Height Slider */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between text-[9px] font-bold text-text-secondary">
+                        <span>Height Box</span>
+                        <span className="font-mono text-text-primary">{img.heightPx || 160}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="80"
+                        max="350"
+                        step="10"
+                        value={img.heightPx || 160}
+                        onChange={(e) => updateImage(img.id, { heightPx: parseInt(e.target.value) })}
+                        className="w-full h-1.5 bg-surface-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

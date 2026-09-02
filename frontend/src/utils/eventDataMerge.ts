@@ -14,7 +14,14 @@ export function isEmptyValue(value: unknown): boolean {
   if (Array.isArray(value)) {
     if (value.length === 0) return true;
     // For resource persons, check if all objects in the list are empty/placeholder
-    if (value.every(item => typeof item === 'object' && item !== null && Object.values(item).every(val => !val || val.trim() === '' || val.trim().toLowerCase() === 'n/a' || val.trim().toLowerCase() === 'guest speaker' || val.trim().toLowerCase() === 'resource person' || val.trim().toLowerCase() === 'invited organization'))) {
+    if (value.every(item => typeof item === 'object' && item !== null && Object.values(item).every(val => {
+      if (!val) return true;
+      if (typeof val === 'string') {
+        const t = val.trim().toLowerCase();
+        return t === '' || t === 'n/a' || t === 'guest speaker' || t === 'resource person' || t === 'invited organization';
+      }
+      return false;
+    }))) {
       return true;
     }
   }

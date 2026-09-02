@@ -11,7 +11,7 @@ const fileToImage = (file: File | Blob): Promise<HTMLImageElement> => {
       URL.revokeObjectURL(url);
       resolve(img);
     };
-    img.onerror = (e) => {
+    img.onerror = () => {
       URL.revokeObjectURL(url);
       reject(new Error("Failed to load image for canvas preprocessing."));
     };

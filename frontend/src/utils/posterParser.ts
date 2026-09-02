@@ -13,6 +13,7 @@ export interface ParsedPosterData {
   audience: string;
   description: string;
   confidence: number;
+  outcomes?: string[];
 }
 
 // Event keywords for Title Scoring and Classification
@@ -54,12 +55,27 @@ const MONTHS_MAP: Record<string, string> = {
   dec: 'December', december: 'December'
 };
 
+export function isGarbageOcrLine(line: string): boolean {
+  if (!line || line.trim().length < 3) return true;
+  const str = line.trim();
+  if (/[©®™”«»]/.test(str)) return true;
+  if (/\b(membre|ue,\s*eno|ceq)\b/i.test(str)) return true;
+  const letters = str.replace(/[^a-zA-Z]/g, '').length;
+  if (letters < 3 && str.length > 5) return true;
+  if (letters / str.length < 0.35 && !/\b(19|20)\d{2}\b/.test(str)) return true;
+  return false;
+}
+
 /**
  * Parses cleaned OCR text and extracts structured event fields.
  */
 export function parsePosterText(rawText: string): ParsedPosterData {
   const normalizedText = normalizeOcrText(rawText);
-  const lines = normalizedText.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = normalizedText
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .filter(l => !isGarbageOcrLine(l));
 
   // Initialize output fields
   let title = '';

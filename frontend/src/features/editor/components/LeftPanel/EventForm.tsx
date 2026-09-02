@@ -5,10 +5,7 @@ import { Plus, Trash, Users, Calendar, Award, BookOpen, ListOrdered, Sparkles, U
 import { Input } from '../../../../components/ui/Input';
 import { Textarea } from '../../../../components/ui/Textarea';
 import { Button } from '../../../../components/ui/Button';
-import Tesseract from 'tesseract.js';
-import { normalizeOcrText } from '../../../../utils/ocrNormalizer';
-import { parsePosterText } from '../../../../utils/posterParser';
-import { generateEventReport } from '../../../../utils/reportGenerator';
+import { executePosterAutofill } from '../../../../utils/autofillPipeline';
 
 export const EventForm: React.FC = () => {
   const {
@@ -19,222 +16,73 @@ export const EventForm: React.FC = () => {
     updateResourcePerson,
     addSummaryPoint,
     removeSummaryPoint,
-    updateSummaryPoint,
-    addOutcomePoint,
-    removeOutcomePoint,
-    updateOutcomePoint,
-    autofillData
+    updateSummaryPoint
   } = useEditorStore();
 
   // AI Autofill States
   const [fileName, setFileName] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
+  const uploadSessionIdRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const analysisStepsText = [
-    "Uploading poster...",
-    "Extracting text...",
-    "Analyzing content...",
-    "Identifying event details...",
-    "Generating report...",
-    "Finalizing auto-fill..."
-  ];
-
-  const formatToInputDate = (dateStr: string): string => {
-    try {
-      const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().split('T')[0];
-      }
-    } catch (e) {}
-    return '2026-09-18';
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setFileName(files[0].name);
+      const file = files[0];
+      setFileName(file.name);
       setAnalysisStep(0);
+
+      // Reset previous event/report data completely before starting the new extraction
+      const store = useEditorStore.getState();
+      store.clearReportData();
+
+      // Trigger extraction immediately
+      await triggerRealPosterAutofill(file);
     }
   };
 
-  const triggerRealPosterAutofill = async () => {
-    if (!fileInputRef.current?.files || fileInputRef.current.files.length === 0) return;
-    const file = fileInputRef.current.files[0];
+  const triggerRealPosterAutofill = async (file: File) => {
+    const store = useEditorStore.getState();
+    const sessionId = store.startAutofillSession();
+    uploadSessionIdRef.current = sessionId;
     
     setIsAnalyzing(true);
-    setAnalysisStep(1); // 1 = Uploading poster
+    setAnalysisStep(1);
 
     try {
-      // Stage 1: Uploading poster...
-      setAnalysisStep(1);
-      await new Promise(r => setTimeout(r, 400));
-
-      // Stage 2: Extracting text...
-      setAnalysisStep(2);
-      let extractionData: any;
-      let apiGeneratedContent: any = null;
-      let isFallback = false;
-
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch('/api/autofill/extract', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('API server unavailable');
-        }
-
-        const resData = await response.json();
-        apiGeneratedContent = resData.generatedContent || null;
-
-        extractionData = {
-          title: resData.eventTitle || '',
-          batch: resData.audience || 'Students & Faculty',
-          date: resData.date || '',
-          time: resData.time || '',
-          eventType: resData.eventType || '',
-          dressCode: '',
-          specialNote: '',
-          venue: resData.venue || '',
-          department: resData.department || '',
-          speaker: resData.speakers?.map((s: any) => `${s.name} (${s.designation})`).join(', ') || '',
-          coordinator: resData.organizedBy || '',
-          facultyInCharge: '',
-          theme: resData.speakers?.[0]?.designation || '',
-          description: resData.briefDescription || '',
-        };
-      } catch (err) {
-        console.warn("Backend extraction failed, falling back to local Tesseract OCR:", err);
-        isFallback = true;
-      }
-
-      if (isFallback) {
-        let text = '';
-        const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-        if (extension === '.txt' || file.type.startsWith('text/')) {
-          text = await file.text();
-        } else {
-          const result = await Tesseract.recognize(file, 'eng');
-          text = result.data.text;
-        }
-
-        // Stage 3: Analyzing content...
-        setAnalysisStep(3);
-        await new Promise(r => setTimeout(r, 400));
-        const cleanedText = normalizeOcrText(text);
-
-        // Stage 4: Identifying event details...
-        setAnalysisStep(4);
-        await new Promise(r => setTimeout(r, 400));
-        const parsedData = parsePosterText(cleanedText);
-
-        extractionData = {
-          title: parsedData.title || '',
-          batch: parsedData.batch || 'Students & Faculty',
-          date: parsedData.date || '',
-          time: parsedData.time || '',
-          eventType: parsedData.eventType || '',
-          dressCode: '',
-          specialNote: '',
-          venue: parsedData.venue || '',
-          department: parsedData.department || '',
-          speaker: parsedData.speaker || '',
-          coordinator: parsedData.coordinator || '',
-          facultyInCharge: '',
-          theme: parsedData.theme || '',
-          description: parsedData.description || '',
-        };
-      }
-
-      // Stage 5: Generating report...
-      setAnalysisStep(5);
-      await new Promise(r => setTimeout(r, 400));
-      
-      let report: any;
-      if (apiGeneratedContent && Object.keys(apiGeneratedContent).length > 0) {
-        report = {
-          title: extractionData.title,
-          objective: apiGeneratedContent.objectiveDescription || '',
-          objectiveDescription: apiGeneratedContent.objectiveDescription || '',
-          eventSummary: apiGeneratedContent.eventSummary || '',
-          highlights: apiGeneratedContent.summaryPoints || [],
-          detailedHighlights: apiGeneratedContent.summaryPoints || [],
-          outcomes: apiGeneratedContent.keyProgramOutcomes || [],
-          attendancePercentage: '',
-          conclusion: '',
-          detailedConclusion: '',
-          participationDetails: ''
-        };
-      } else {
-        const parsedForReport = {
-          title: extractionData.title,
-          department: extractionData.department,
-          organizer: extractionData.coordinator,
-          eventType: extractionData.eventType,
-          speaker: extractionData.speaker,
-          designation: extractionData.theme,
-          date: extractionData.date,
-          time: extractionData.time,
-          venue: extractionData.venue,
-          audience: extractionData.batch,
-          description: extractionData.description,
-        };
-        report = generateEventReport(parsedForReport);
-      }
-
-      // Stage 6: Finalizing auto-fill...
-      setAnalysisStep(6);
-      await new Promise(r => setTimeout(r, 450));
-
-      // Format date correctly
-      const inputDateStr = formatToInputDate(extractionData.date);
-      const speakerName = extractionData.speaker ? extractionData.speaker.split('(')[0].trim() : "";
-      
-      autofillData({
-        title: report.title,
-        department: extractionData.department,
-        organizingBody: extractionData.coordinator || (extractionData.department ? `Department of ${extractionData.department}` : ""),
-        collaboration: '',
-        startDate: inputDateStr,
-        endDate: inputDateStr,
-        venue: extractionData.venue,
-        purpose: report.objective,
-        objectiveDescription: report.objectiveDescription,
-        eventSummary: report.eventSummary,
-        resourcePersons: speakerName ? [
-          {
-            name: speakerName,
-            designation: extractionData.theme || '',
-            organization: extractionData.coordinator || ''
+      await executePosterAutofill(file, {
+        sessionId,
+        onProgress: (step) => {
+          if (store.isAutofillSessionActive(sessionId)) {
+            setAnalysisStep(step);
           }
-        ] : [],
-        participantCount: {
-          facultyCount: 0,
-          studentCount: 0,
-          externalCount: 0,
-          total: 0
         },
-        summaryPoints: report.detailedHighlights || report.highlights || [],
-        outcomePoints: report.outcomes || [],
-        attendancePercentage: report.attendancePercentage || '',
-        conclusion: report.detailedConclusion || report.conclusion || '',
-        participationDetails: report.participationDetails || '',
-        images: []
+        isCancelled: () => !store.isAutofillSessionActive(sessionId)
       });
 
-      setAnalysisStep(7); // All complete
-      setIsAnalyzing(false);
-    } catch (err) {
-      console.error(err);
-      alert("Autofill failed: " + (err as Error).message);
-      setIsAnalyzing(false);
-      setAnalysisStep(0);
+      if (store.isAutofillSessionActive(sessionId)) {
+        setAnalysisStep(7);
+        setIsAnalyzing(false);
+      }
+    } catch (err: any) {
+      if (err.message === 'STALE_SESSION' || err.name === 'AbortError') {
+        return;
+      }
+      if (store.isAutofillSessionActive(sessionId)) {
+        setIsAnalyzing(false);
+        setAnalysisStep(0);
+        
+        store.clearReportData();
+
+        if (err.message === 'QUOTA_EXCEEDED') {
+          alert("Today's AI limit has been reached. Gemini Auto Fill is temporarily unavailable. Please try again later.");
+        } else if (err.message === 'OFFLINE') {
+          alert("AI Auto Fill is temporarily unavailable. Please check your connection or try again later.");
+        } else {
+          alert("Autofill failed: " + err.message);
+        }
+      }
     }
   };
 
@@ -268,80 +116,28 @@ export const EventForm: React.FC = () => {
               className="hidden"
             />
             
-            {!fileName ? (
-              <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="border border-dashed border-surface-tertiary hover:border-accent-primary/60 bg-surface-primary rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors duration-150"
-              >
-                <Upload className="w-5 h-5 text-text-muted mb-1.5" />
-                <span className="text-[11px] font-bold text-text-secondary">Upload Flyer Poster (PNG, PDF)</span>
-                <span className="text-[9px] text-text-muted mt-0.5">Let AI read poster details & auto-fill</span>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                <div className="bg-surface-primary p-2.5 rounded-xl border border-surface-tertiary flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-text-secondary truncate max-w-[150px]" title={fileName}>
-                    {fileName}
-                  </span>
-                  <button 
-                    onClick={() => { setFileName(''); setAnalysisStep(0); }}
-                    className="text-[9px] text-red-500 hover:underline font-bold"
-                  >
-                    Clear
-                  </button>
-                </div>
-                <Button 
-                  onClick={triggerRealPosterAutofill}
-                  variant="primary"
-                  className="w-full text-[11px] py-2 rounded-xl"
-                >
-                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                  Analyze with AI
-                </Button>
-              </div>
-            )}
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="border border-dashed border-surface-tertiary hover:border-accent-primary/60 bg-surface-primary rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors duration-150"
+            >
+              <Upload className="w-5 h-5 text-text-muted mb-1.5" />
+              <span className="text-[11px] font-bold text-text-secondary">Upload Flyer Poster (PNG, PDF)</span>
+              <span className="text-[9px] text-text-muted mt-0.5">Let AI read poster details & auto-fill</span>
+            </div>
           </div>
         ) : (
           <div className="space-y-3.5 pt-1">
-            {/* Animated stepper */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[10px] font-bold text-text-secondary">
-                <span>AI Processing Stage</span>
-                <span>{analysisStep < 7 ? `${Math.round((Math.min(analysisStep, 6) / 6) * 100)}%` : '100%'}</span>
+            {analysisStep < 7 ? (
+              <div className="bg-surface-primary p-4 rounded-xl border border-surface-tertiary text-center space-y-2">
+                <div className="flex items-center justify-center space-x-2 text-xs font-bold text-accent-primary animate-pulse">
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Analyzing poster…</span>
+                </div>
+                <p className="text-[10px] text-text-secondary leading-relaxed">
+                  Extracting event details from <span className="font-semibold">{fileName}</span> and generating report content.
+                </p>
               </div>
-              
-              <div className="w-full bg-surface-tertiary h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="bg-accent-primary h-full transition-all duration-300 ease-out" 
-                  style={{ width: `${(Math.min(analysisStep, 6) / 6) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="bg-surface-primary p-3 rounded-xl border border-surface-tertiary space-y-2">
-              {analysisStepsText.map((text, idx) => {
-                const stepNum = idx + 1;
-                const isDone = analysisStep > stepNum;
-                const isActive = analysisStep === stepNum;
-
-                return (
-                  <div key={idx} className="flex items-center space-x-2 text-[10px]">
-                    {isDone ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                    ) : isActive ? (
-                      <Loader2 className="w-3.5 h-3.5 text-accent-primary animate-spin flex-shrink-0" />
-                    ) : (
-                      <div className="w-3.5 h-3.5 rounded-full border border-surface-tertiary flex-shrink-0" />
-                    )}
-                    <span className={`font-medium ${isDone ? 'text-text-secondary line-through opacity-60' : isActive ? 'text-accent-primary font-bold' : 'text-text-muted'}`}>
-                      {text}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {analysisStep === 7 && (
+            ) : (
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-green-600 dark:text-green-400 font-extrabold flex items-center">
                   <CheckCircle className="w-3.5 h-3.5 mr-1 text-green-500" />
@@ -571,44 +367,6 @@ export const EventForm: React.FC = () => {
               />
               <Button
                 onClick={() => removeSummaryPoint(idx)}
-                variant="danger"
-                className="p-2 rounded-xl mt-1.5"
-              >
-                <Trash className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* SECTION 7: Outcome Points */}
-      <div className="space-y-4 pt-4 border-t border-surface-tertiary">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider flex items-center space-x-2">
-            <ListOrdered className="w-4.5 h-4.5 text-accent-primary" />
-            <span>Event Outcomes</span>
-          </h3>
-          <Button
-            onClick={addOutcomePoint}
-            size="sm"
-            className="p-1.5 rounded-xl text-text-primary"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
-        <div className="space-y-3.5">
-          {data.outcomePoints.map((pt, idx) => (
-            <div key={idx} className="flex items-start space-x-2 bg-surface-primary border border-surface-tertiary p-2 rounded-3xl relative group hover:shadow-sm transition-all duration-200 theme-transition">
-              <span className="text-[10px] text-text-muted font-mono mt-3.5 ml-1.5 flex-shrink-0">#{idx + 1}</span>
-              <Textarea
-                value={pt}
-                onChange={(e) => updateOutcomePoint(idx, e.target.value)}
-                placeholder="Key outcome bullet..."
-                className="flex-1 bg-surface-primary min-h-[50px]"
-              />
-              <Button
-                onClick={() => removeOutcomePoint(idx)}
                 variant="danger"
                 className="p-2 rounded-xl mt-1.5"
               >

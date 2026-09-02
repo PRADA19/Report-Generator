@@ -1,26 +1,40 @@
 // frontend/src/features/editor/components/LeftPanel/ImageList.tsx
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import { Upload, Trash2, Image as ImageIcon, Sliders, Type, Maximize, Eye } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, Sliders, Type, Maximize, Eye, Check, LayoutGrid, Sparkles } from 'lucide-react';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
-import { Select } from '../../../../components/ui/Select';
+import { getPresetsForCount, getPresetById } from './photoLayoutPresets';
+import { PhotoLayoutModal } from './PhotoLayoutModal';
 
 export const ImageList: React.FC = () => {
   const { data, addImage, updateImage, removeImage, layoutConfig, updateLayoutConfig } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const file = files[0];
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          addImage(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
+      const fileList = Array.from(files);
+      const readPromises = fileList.map(file => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+              resolve(reader.result);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const urls = await Promise.all(readPromises);
+      urls.forEach(url => addImage(url));
+
+      const updatedTotal = data.images.length + urls.length;
+      if (updatedTotal > 1) {
+        setIsModalOpen(true);
+      }
     }
   };
 
@@ -28,29 +42,35 @@ export const ImageList: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  // Section wide layout modes
-  const isCompact = layoutConfig.compactPhotoMode || false;
-  const currentLayoutMode = isCompact ? 'compact' : (layoutConfig.photoLayoutMode || 'two');
+  const imageCount = data.images.length;
+  const availablePresets = getPresetsForCount(imageCount);
+  const activePreset = getPresetById(layoutConfig.photoLayoutPreset, imageCount);
 
-  const handleLayoutModeChange = (mode: 'single' | 'two' | 'three' | 'compact') => {
-    if (mode === 'compact') {
-      updateLayoutConfig({
-        compactPhotoMode: true,
-        photoLayoutMode: 'compact'
-      });
-    } else {
-      updateLayoutConfig({
-        compactPhotoMode: false,
-        photoLayoutMode: mode
-      });
+  // Auto-pop modal when photograph count increases above 1
+  const prevCountRef = useRef(imageCount);
+  useEffect(() => {
+    if (imageCount > 1 && imageCount !== prevCountRef.current) {
+      setIsModalOpen(true);
     }
-  };
+    prevCountRef.current = imageCount;
+  }, [imageCount]);
 
-  const handleToggleCompactMode = () => {
-    const nextCompact = !isCompact;
+  // Auto-synchronize layoutConfig.photoLayoutPreset when photo count changes
+  useEffect(() => {
+    if (imageCount > 0 && availablePresets.length > 0) {
+      const isValid = availablePresets.some(p => p.id === layoutConfig.photoLayoutPreset);
+      if (!isValid) {
+        updateLayoutConfig({ photoLayoutPreset: availablePresets[0].id });
+      }
+    }
+  }, [imageCount, layoutConfig.photoLayoutPreset]);
+
+  const isCompact = layoutConfig.compactPhotoMode || false;
+
+  const handleSelectPreset = (presetId: string) => {
     updateLayoutConfig({
-      compactPhotoMode: nextCompact,
-      ...(nextCompact ? { photoLayoutMode: 'compact' } : { photoLayoutMode: 'two' })
+      photoLayoutPreset: presetId,
+      compactPhotoMode: false
     });
   };
 
@@ -83,6 +103,7 @@ export const ImageList: React.FC = () => {
           ref={fileInputRef}
           onChange={handleFileChange}
           accept="image/*"
+          multiple
           className="hidden"
         />
 
@@ -100,36 +121,79 @@ export const ImageList: React.FC = () => {
 
       {/* 2. Global Gallery Layout Configurations */}
       <div className="bg-bg-secondary/40 border border-surface-tertiary/75 rounded-2xl p-3.5 space-y-3 shadow-sm">
-        <span className="text-[10px] font-extrabold text-text-secondary uppercase tracking-wider block">
-          Gallery Layout Configuration
-        </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-1.5">
+            <LayoutGrid className="w-3.5 h-3.5 text-accent-primary" />
+            <span className="text-[10px] font-extrabold text-text-secondary uppercase tracking-wider block">
+              Visual Layout Choices ({availablePresets.length} for {imageCount} {imageCount === 1 ? 'Photo' : 'Photos'})
+            </span>
+          </div>
 
-        {/* Layout Mode Grid Select */}
-        <Select
-          label="Photo Grid Layout"
-          value={currentLayoutMode}
-          onChange={(e) => handleLayoutModeChange(e.target.value as any)}
-        >
-          <option value="single" className="bg-surface-primary text-text-primary">Single Large (1 Col)</option>
-          <option value="two" className="bg-surface-primary text-text-primary">Two Column (2 Col)</option>
-          <option value="three" className="bg-surface-primary text-text-primary">Three Column (3 Col)</option>
-          <option value="compact" className="bg-surface-primary text-text-primary">Compact Evidence Grid (2 Col)</option>
-        </Select>
+          {imageCount > 1 && (
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="text-[9px] font-bold text-accent-primary hover:text-accent-primary/80 flex items-center space-x-1 border border-accent-primary/30 bg-accent-primary/10 px-2 py-0.5 rounded-lg transition-all cursor-pointer"
+            >
+              <Sparkles className="w-2.5 h-2.5" />
+              <span>Choose Pop-Up</span>
+            </button>
+          )}
+        </div>
 
-        {/* Compact Mode Toggle */}
-        <label className="flex items-center space-x-2 pt-1 cursor-pointer select-none text-[10px] font-bold text-text-primary">
-          <input
-            type="checkbox"
-            checked={isCompact}
-            onChange={handleToggleCompactMode}
-            className="w-4 h-4 rounded border-surface-tertiary text-accent-primary focus:ring-accent-primary focus:ring-2 focus:ring-offset-2 accent-accent-primary"
-          />
-          <span className="uppercase tracking-wider">Compact Photo Mode (Tight fit)</span>
-        </label>
-        {isCompact && (
-          <p className="text-[9px] text-accent-primary font-medium pl-6 leading-tight">
-            * Locks dimensions to 48% width & 140px height for optimal spacing.
-          </p>
+        {availablePresets.length === 0 ? (
+          <div className="text-[10px] text-text-secondary italic text-center py-2">
+            Upload photographs to view visual layout presets.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5 pt-1">
+            {availablePresets.map((preset) => {
+              const isSelected = activePreset.id === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset.id)}
+                  className={`relative flex flex-col items-center justify-between p-2 rounded-xl border transition-all text-left group cursor-pointer ${
+                    isSelected
+                      ? 'border-accent-primary bg-accent-primary/10 shadow-md ring-2 ring-accent-primary/30'
+                      : 'border-surface-tertiary bg-surface-primary hover:border-text-muted hover:bg-surface-secondary'
+                  }`}
+                >
+                  {/* Selected Checkmark Indicator */}
+                  {isSelected && (
+                    <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-accent-primary text-white flex items-center justify-center shadow z-10">
+                      <Check className="w-2.5 h-2.5 stroke-[3]" />
+                    </div>
+                  )}
+
+                  {/* Miniature A4 Visual Preview Card */}
+                  <div className="w-full aspect-[1/1.2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-1.5 flex flex-col gap-1 shadow-inner overflow-hidden justify-center items-center">
+                    {preset.rows.map((row, rIdx) => (
+                      <div key={rIdx} className="flex gap-1 justify-center w-full">
+                        {row.columns.map((colWidth, cIdx) => (
+                          <div
+                            key={cIdx}
+                            style={{ width: `${colWidth}%` }}
+                            className={`h-4 rounded-[2px] transition-colors ${
+                              isSelected
+                                ? 'bg-accent-primary/80 border border-accent-primary'
+                                : 'bg-slate-300 dark:bg-slate-700 group-hover:bg-slate-400'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Preset Label */}
+                  <span className={`text-[10px] font-bold tracking-tight text-center w-full truncate mt-1 ${isSelected ? 'text-accent-primary' : 'text-text-primary'}`}>
+                    {preset.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -328,6 +392,12 @@ export const ImageList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Interactive Pop-Up Modal for Photo Layout Selection */}
+      <PhotoLayoutModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+      />
 
     </div>
   );
