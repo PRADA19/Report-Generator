@@ -3,45 +3,99 @@ import type { ExportOptions } from '../../types/report';
 
 export const exportService = {
   /**
-   * Export document to PDF using high-resolution print stream
+   * Export document to PDF with exact 1:1 A4 page fidelity using jsPDF and html2canvas
    */
   async exportToPdf(options?: ExportOptions): Promise<boolean> {
     try {
       const fileName = options?.fileName || 'Event_Report.pdf';
-      const reportElement = document.querySelector('.a4-multi-page-document') || document.querySelector('#live-report-preview');
+      const rootDoc = document.querySelector('.a4-multi-page-document');
+      
+      // Select all visible A4 pages in document order (ignoring offscreen measurer)
+      const pageWrappers = rootDoc 
+        ? Array.from(rootDoc.querySelectorAll<HTMLElement>('.a4-page-wrapper'))
+        : [];
+      
+      const pageElements = pageWrappers.length > 0
+        ? pageWrappers.map(w => w.querySelector<HTMLElement>('.a4-page')).filter((p): p is HTMLElement => Boolean(p))
+        : Array.from(document.querySelectorAll<HTMLElement>('.a4-page:not(.offscreen-measurer *)'));
 
-      if (!reportElement) {
+      if (pageElements.length === 0) {
         window.print();
         return true;
       }
 
-      // Clone DOM element to strip non-printable badges
-      const clone = reportElement.cloneNode(true) as HTMLElement;
-      clone.querySelectorAll('.no-print, .page-number-badge, button, input').forEach(el => el.remove());
+      const { jsPDF } = await import('jspdf');
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default || html2canvasModule;
 
-      // Reset preview scale transforms on cloned pages for 1:1 rendering
-      clone.querySelectorAll<HTMLElement>('.a4-page').forEach(pageEl => {
-        pageEl.style.transform = 'none';
-        pageEl.style.margin = '0 auto';
-        pageEl.style.boxShadow = 'none';
+      const firstPage = pageElements[0];
+      const isLandscape = firstPage.classList.contains('landscape') || options?.orientation === 'landscape';
+      const pageWidthMm = isLandscape ? 297 : 210;
+      const pageHeightMm = isLandscape ? 210 : 297;
+
+      const pdf = new jsPDF({
+        orientation: isLandscape ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
       });
 
-      const html2pdfModule = await import('html2pdf.js');
-      const html2pdf = html2pdfModule.default || html2pdfModule;
+      for (let i = 0; i < pageElements.length; i++) {
+        const pageEl = pageElements[i];
 
-      const opt = {
-        margin: 0,
-        filename: fileName,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
-        pagebreak: { mode: ['css', 'legacy'], avoid: '.no-break' }
-      };
+        // Ensure all images within this page are loaded before capture
+        const imgs = Array.from(pageEl.querySelectorAll('img'));
+        await Promise.all(imgs.map(img => {
+          if (img.complete) return Promise.resolve(true);
+          return new Promise(resolve => {
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(true);
+          });
+        }));
 
-      await html2pdf().set(opt).from(clone).save();
+        const canvas = await html2canvas(pageEl, {
+          scale: 2.5,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          onclone: (clonedDoc, clonedElement) => {
+            // In the cloned render iframe, reset all transforms for natural 1:1 sizing
+            if (clonedElement) {
+              clonedElement.style.transform = 'none';
+              clonedElement.style.margin = '0';
+              clonedElement.style.boxShadow = 'none';
+            }
+
+            clonedDoc.querySelectorAll<HTMLElement>('.a4-page-wrapper').forEach(wrapper => {
+              wrapper.style.transform = 'none';
+              wrapper.style.margin = '0';
+              wrapper.style.padding = '0';
+            });
+
+            clonedDoc.querySelectorAll<HTMLElement>('.a4-page').forEach(p => {
+              p.style.transform = 'none';
+              p.style.margin = '0';
+              p.style.boxShadow = 'none';
+            });
+
+            // Hide UI controls, buttons, and page badges from export
+            clonedDoc.querySelectorAll('.no-print, .page-number-badge, button, input').forEach(el => {
+              (el as HTMLElement).style.display = 'none';
+            });
+          }
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+        if (i > 0) {
+          pdf.addPage('a4', isLandscape ? 'landscape' : 'portrait');
+        }
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidthMm, pageHeightMm, undefined, 'FAST');
+      }
+
+      pdf.save(fileName);
       return true;
     } catch (err) {
-      console.warn('Direct PDF generation notice, triggering print stream:', err);
+      console.error('Direct PDF export error, falling back to print dialog:', err);
       window.print();
       return true;
     }

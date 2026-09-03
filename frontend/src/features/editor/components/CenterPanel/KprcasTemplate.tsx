@@ -87,7 +87,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
   const logoPosition = safeStyling.logoPosition || 'left';
   const showLogo = safeStyling.showLogo !== false;
 
-  const renderHeaderSection = () => {
+    const renderHeaderSection = () => {
     const tableStyle: React.CSSProperties = {
       width: `${tableWidthPercent}%`,
       marginLeft: 'auto',
@@ -109,48 +109,118 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
     const headerReportTitle = safeData.header?.reportTitle || "Report of the Event";
 
     return (
-      <div key="document-header" className="report-section document-header-section pb-3 mb-4">
-        <div className="pb-3 border-b-2 mb-4 relative flex flex-col items-center w-full" style={{ borderColor: styling.primaryColor }}>
-          {/* Logo Positioned Relative / Absolute */}
-          {showLogo && (
-            <div 
-              className={`flex flex-col items-center z-10 ${
-                logoPosition === 'center' 
-                  ? 'static mb-2' 
-                  : (logoPosition === 'right' ? 'absolute right-0 top-0' : 'absolute left-0 top-0')
-              }`} 
-              style={{ width: `${logoWidthPx}px` }}
-            >
-              <img 
-                src={data.header?.logo || '/kprcas_logo.png'} 
-                alt="KPRCAS Logo" 
-                style={{ width: `${logoWidthPx}px`, height: `${logoHeightPx}px`, objectFit: 'contain' }} 
-              />
+      <div key="document-header" className="report-section document-header-section pb-2 mb-3">
+        <div className="pb-2 border-b-2 mb-3 relative flex flex-col w-full" style={{ borderColor: styling.primaryColor }}>
+          {showLogo && logoPosition === 'center' ? (
+            <div className="flex flex-col items-center w-full">
+              <div className="mb-2" style={{ width: `${logoWidthPx}px` }}>
+                <img 
+                  src={data.header?.logo || '/kprcas_logo.png'} 
+                  alt="KPRCAS Logo" 
+                  style={{ width: `${logoWidthPx}px`, height: `${logoHeightPx}px`, objectFit: 'contain' }} 
+                />
+              </div>
+              <div className="text-center w-full px-2">
+                <h1 className="font-extrabold uppercase" style={{ fontSize: `${fontSizeHeader}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerInstitutionName}
+                </h1>
+                <p className="text-slate-700 font-semibold mt-0.5" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                  {headerDetails}
+                </p>
+                <p className="text-slate-700 font-medium" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                  {headerAddress}
+                </p>
+                <div className="my-1.5" />
+                <h2 className="font-bold uppercase" style={{ fontSize: `${fontSizeTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerDocTitle}
+                </h2>
+                <h3 className="font-extrabold uppercase mt-0.5" style={{ fontSize: `${fontSizeReportTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerReportTitle}
+                </h3>
+              </div>
+            </div>
+          ) : showLogo && logoPosition === 'right' ? (
+            <div className="flex items-center justify-between w-full">
+              <div style={{ width: `${logoWidthPx}px` }} className="flex-shrink-0" aria-hidden="true" />
+              <div className="text-center flex-1 min-w-0 px-2">
+                <h1 className="font-extrabold uppercase" style={{ fontSize: `${fontSizeHeader}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerInstitutionName}
+                </h1>
+                <p className="text-slate-700 font-semibold mt-0.5" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                  {headerDetails}
+                </p>
+                <p className="text-slate-700 font-medium" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                  {headerAddress}
+                </p>
+                <div className="my-1.5" />
+                <h2 className="font-bold uppercase" style={{ fontSize: `${fontSizeTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerDocTitle}
+                </h2>
+                <h3 className="font-extrabold uppercase mt-0.5" style={{ fontSize: `${fontSizeReportTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerReportTitle}
+                </h3>
+              </div>
+              <div style={{ width: `${logoWidthPx}px` }} className="flex-shrink-0 flex items-center justify-end">
+                <img 
+                  src={data.header?.logo || '/kprcas_logo.png'} 
+                  alt="KPRCAS Logo" 
+                  style={{ width: `${logoWidthPx}px`, height: `${logoHeightPx}px`, objectFit: 'contain' }} 
+                />
+              </div>
+            </div>
+          ) : showLogo ? (
+            /* Default: Logo Left with Balanced Right Spacer */
+            <div className="flex items-center justify-between w-full">
+              <div style={{ width: `${logoWidthPx}px` }} className="flex-shrink-0 flex items-center justify-start">
+                <img 
+                  src={data.header?.logo || '/kprcas_logo.png'} 
+                  alt="KPRCAS Logo" 
+                  style={{ width: `${logoWidthPx}px`, height: `${logoHeightPx}px`, objectFit: 'contain' }} 
+                />
+              </div>
+              <div className="text-center flex-1 min-w-0 px-2">
+                <h1 className="font-extrabold uppercase" style={{ fontSize: `${fontSizeHeader}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerInstitutionName}
+                </h1>
+                <p className="text-slate-700 font-semibold mt-0.5" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                  {headerDetails}
+                </p>
+                <p className="text-slate-700 font-medium" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                  {headerAddress}
+                </p>
+                <div className="my-1.5" />
+                <h2 className="font-bold uppercase" style={{ fontSize: `${fontSizeTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerDocTitle}
+                </h2>
+                <h3 className="font-extrabold uppercase mt-0.5" style={{ fontSize: `${fontSizeReportTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                  {headerReportTitle}
+                </h3>
+              </div>
+              <div style={{ width: `${logoWidthPx}px` }} className="flex-shrink-0" aria-hidden="true" />
+            </div>
+          ) : (
+            <div className="text-center w-full px-2">
+              <h1 className="font-extrabold uppercase" style={{ fontSize: `${fontSizeHeader}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                {headerInstitutionName}
+              </h1>
+              <p className="text-slate-700 font-semibold mt-0.5" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                {headerDetails}
+              </p>
+              <p className="text-slate-700 font-medium" style={{ fontSize: `${fontSizeSubHeader}pt`, lineHeight: 1.2 }}>
+                {headerAddress}
+              </p>
+              <div className="my-1.5" />
+              <h2 className="font-bold uppercase" style={{ fontSize: `${fontSizeTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                {headerDocTitle}
+              </h2>
+              <h3 className="font-extrabold uppercase mt-0.5" style={{ fontSize: `${fontSizeReportTitle}pt`, color: styling.primaryColor, lineHeight: 1.25 }}>
+                {headerReportTitle}
+              </h3>
             </div>
           )}
 
-          {/* Header Info Column - Perfectly Centered Across Page Width */}
-          <div className="text-center w-full px-2">
-            <h1 className="font-extrabold uppercase tracking-wide" style={{ fontSize: `${fontSizeHeader}pt`, color: styling.primaryColor }}>
-              {headerInstitutionName}
-            </h1>
-            <p className="text-slate-700 font-semibold mt-0.5" style={{ fontSize: `${fontSizeSubHeader}pt` }}>
-              {headerDetails}
-            </p>
-            <p className="text-slate-700 font-medium" style={{ fontSize: `${fontSizeSubHeader}pt` }}>
-              {headerAddress}
-            </p>
-            <div className="my-2" />
-            <h2 className="font-bold uppercase tracking-wider" style={{ fontSize: `${fontSizeTitle}pt`, color: styling.primaryColor }}>
-              {headerDocTitle}
-            </h2>
-            <h3 className="font-extrabold uppercase tracking-wider mt-0.5" style={{ fontSize: `${fontSizeReportTitle}pt`, color: styling.primaryColor }}>
-              {headerReportTitle}
-            </h3>
-          </div>
-
-          {/* Date Label on Far Right under Header Title matching reference template */}
-          <div className="w-full flex justify-end mt-1 pr-2 font-bold text-slate-800" style={{ fontSize: `${fontSizeBase * 0.9}pt` }}>
+          {/* Date Label on Far Right under Header Title */}
+          <div className="w-full flex justify-end mt-1 pr-1 font-bold text-slate-800" style={{ fontSize: `${fontSizeBase * 0.9}pt` }}>
             <span>Date: <span className="font-normal">{data.startDate ? formatDateToDdMmYyyy(data.startDate) : ''}</span></span>
           </div>
         </div>
@@ -535,10 +605,10 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
     }
 
     const measuredHeight = dummyPage.offsetHeight || dummyPage.clientHeight || 0;
-    const footerReservedMm = layoutConfig.showFooter !== false ? 26 : 6;
+    const footerReservedMm = layoutConfig.showFooter !== false ? 8 : 0;
     const a4FallbackPx = (pageHeightMm - margins.top - margins.bottom - footerReservedMm) * 3.779527559;
     const rawUsableHeight = measuredHeight > 100 ? measuredHeight : a4FallbackPx;
-    const usableHeight = Math.max(100, rawUsableHeight - 36);
+    const usableHeight = Math.max(100, rawUsableHeight - 8);
 
     const childNodes = Array.from(measurerRef.current.querySelector('.continuous-document')?.children || []) as HTMLElement[];
     if (childNodes.length === 0) {
@@ -785,7 +855,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
           opacity: 0
         }}
       >
-        <div className="dummy-page" style={{ height: `calc(${pageHeightMm}mm - ${margins.top}mm - ${margins.bottom}mm - ${layoutConfig.showFooter !== false ? '26mm' : '6mm'})`, width: '100%' }} />
+        <div className="dummy-page" style={{ height: `calc(${pageHeightMm}mm - ${margins.top}mm - ${margins.bottom}mm - ${layoutConfig.showFooter !== false ? '8mm' : '0mm'})`, width: '100%' }} />
         <div 
           className="continuous-document"
           style={{
@@ -882,7 +952,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
                     paddingRight: `${margins.right}mm`,
                   }}
                 >
-                  <div className="flex-1 relative pb-6 overflow-hidden">
+                  <div className="flex-1 relative overflow-hidden flex flex-col justify-start">
                     {page}
                   </div>
 

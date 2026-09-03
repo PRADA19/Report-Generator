@@ -17,4 +17,5 @@ export interface ExportOptions {
   format?: 'pdf' | 'docx' | 'print';
   fileName?: string;
   includeImages?: boolean;
+  orientation?: 'portrait' | 'landscape';
 }

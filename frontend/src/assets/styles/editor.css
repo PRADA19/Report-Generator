@@ -74,13 +74,9 @@
 
 /* Page footer styling */
 .page-footer {
-  position: absolute;
-  bottom: 12mm;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 11px;
-  color: #6b7280;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Ensure child text flows respect spacing custom variables */
