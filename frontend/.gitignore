@@ -7,27 +7,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Node dependencies and build files
 node_modules
 dist
 dist-ssr
 *.local
-
-# Python virtual environments
-venv/
-.venv/
-vision-service/venv/
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Archives / large generated files
-*.zip
-
-# Environment files / secrets
-.env
-.env.*
 
 # Editor directories and files
 .vscode/*
@@ -39,3 +22,10 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example

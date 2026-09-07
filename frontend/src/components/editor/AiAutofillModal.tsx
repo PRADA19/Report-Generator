@@ -14,6 +14,8 @@ import { executePosterAutofill, formatToInputDate, type ExtractedPosterFields } 
 // Load pdf.js worker globally using cdnjs fallback to prevent bundle pathing failures
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
 interface AiAutofillModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -84,7 +86,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
   useEffect(() => {
     if (isOpen) {
       setVisionStatus('loading');
-      fetch('/api/autofill/health')
+      fetch(`${API_URL}/api/autofill/health`)
         .then(async res => {
           const data = await res.json().catch(() => ({}));
           if (data && data.status) {
@@ -524,7 +526,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
       if (predictedVal.trim() && predictedVal.trim().toLowerCase() !== currentVal.trim().toLowerCase()) {
         try {
-          await fetch('/api/autofill/feedback', {
+          await fetch(`${API_URL}/api/autofill/feedback`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

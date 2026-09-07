@@ -14,6 +14,8 @@ if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 }
 
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
 export interface AutofillPipelineOptions {
   sessionId?: string;
   onProgress?: (step: number, message: string) => void;
@@ -213,7 +215,7 @@ export async function executePosterAutofill(
     formData.append('file', processedBlob, file.name.replace(/\.pdf$/i, '.png'));
     formData.append('sessionId', sessionId);
 
-    const response = await fetch('/api/autofill/extract', {
+    const response = await fetch(`${API_URL}/api/autofill/extract`, {
       method: 'POST',
       body: formData,
       signal
