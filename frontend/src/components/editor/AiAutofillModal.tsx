@@ -641,7 +641,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
               <Sparkles className="w-5 h-5 text-accent-primary animate-pulse" />
               <span>Online Auto Fill Workspace</span>
               {visionStatus === 'ONLINE' && (
-                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI (gemini-2.5-flash) is connected and available for Auto Fill.">
+                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI (gemini-3.6-flash) is connected and available for Auto Fill.">
                   ● Gemini AI Online
                 </Badge>
               )}

@@ -56,7 +56,7 @@ const authMiddleware = (req, res, next) => {
 };
 
 const getModelName = () => {
-  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  return process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 };
 
 function getLevenshteinDistance(s, t) {
