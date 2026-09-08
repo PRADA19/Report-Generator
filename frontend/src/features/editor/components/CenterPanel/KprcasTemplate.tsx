@@ -99,7 +99,10 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
 
     const cellStyle: React.CSSProperties = {
       border: `${tableBorderWidthPx}px solid ${tableBorderColor}`,
-      padding: `${tablePaddingPx}px ${tablePaddingPx * 1.5}px`
+      padding: `${Math.max(3, tablePaddingPx - 2)}px ${Math.max(4, tablePaddingPx)}px`,
+      minHeight: '24px',
+      verticalAlign: 'middle',
+      lineHeight: 1.3
     };
 
     const headerInstitutionName = safeData.header?.institutionName || "KPR College of Arts Science and Research";
@@ -221,7 +224,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
 
           {/* Date Label on Far Right under Header Title */}
           <div className="w-full flex justify-end mt-1 pr-1 font-bold text-slate-800" style={{ fontSize: `${fontSizeBase * 0.9}pt` }}>
-            <span>Date: <span className="font-normal">{data.startDate ? formatDateToDdMmYyyy(data.startDate) : ''}</span></span>
+            <span>Date: <span className="font-normal">{data.startDate ? formatDateToDdMmYyyy(data.startDate) : '\u00A0'}</span></span>
           </div>
         </div>
 
@@ -229,15 +232,15 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
           <tbody>
             <tr>
               <th style={{ ...cellStyle, width: `${tableLabelWidthPercent}%` }} className="font-bold text-slate-800 bg-slate-50/50">Event Title</th>
-              <td style={{ ...cellStyle, width: `${100 - tableLabelWidthPercent}%` }} className="font-bold text-slate-900">{data.title || ''}</td>
+              <td style={{ ...cellStyle, width: `${100 - tableLabelWidthPercent}%` }} className="font-bold text-slate-900">{data.title || '\u00A0'}</td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Organizing Body</th>
-              <td style={cellStyle} className="text-slate-800">{data.organizingBody || ''}</td>
+              <td style={cellStyle} className="text-slate-800">{data.organizingBody || '\u00A0'}</td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Collaborations (If any)</th>
-              <td style={cellStyle} className="text-slate-800">{data.collaboration || ''}</td>
+              <td style={cellStyle} className="text-slate-800">{data.collaboration || '\u00A0'}</td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Details of Resource Person</th>
@@ -254,34 +257,34 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
                     ))}
                   </div>
                 ) : (
-                  ''
+                  '\u00A0'
                 )}
               </td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Organizing Department</th>
-              <td style={cellStyle} className="text-slate-800">{data.department || ''}</td>
+              <td style={cellStyle} className="text-slate-800">{data.department || '\u00A0'}</td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Event Date</th>
               <td style={cellStyle} className="text-slate-800">
-                {data.startDate ? (formatDateToDdMmYyyy(data.startDate) + (data.endDate && data.endDate !== data.startDate ? ` to ${formatDateToDdMmYyyy(data.endDate)}` : '')) : ''}
+                {data.startDate ? (formatDateToDdMmYyyy(data.startDate) + (data.endDate && data.endDate !== data.startDate ? ` to ${formatDateToDdMmYyyy(data.endDate)}` : '')) : '\u00A0'}
               </td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Venue</th>
-              <td style={cellStyle} className="text-slate-800">{data.venue || ''}</td>
+              <td style={cellStyle} className="text-slate-800">{data.venue || '\u00A0'}</td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">Time</th>
-              <td style={cellStyle} className="text-slate-800">{data.time || ''}</td>
+              <td style={cellStyle} className="text-slate-800">{data.time || '\u00A0'}</td>
             </tr>
             <tr>
               <th style={cellStyle} className="font-bold text-slate-800 bg-slate-50/50">
                 Total number of Students Participated
               </th>
               <td style={cellStyle} className="text-slate-800 font-bold">
-                {(data.participantCount?.total && data.participantCount.total > 0) ? (data.participantCount.studentCount || data.participantCount.total) : ''}
+                {(data.participantCount?.total && data.participantCount.total > 0) ? (data.participantCount.studentCount || data.participantCount.total) : '\u00A0'}
               </td>
             </tr>
           </tbody>
@@ -335,7 +338,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
 
   sortedSections.forEach((sec) => {
     if (!sec.visible) return;
-    if (sec.id === 'resource_persons' || sec.id === 'participants') return; // Embedded in the header table
+    if (sec.id === 'header' || sec.id === 'resource_persons' || sec.id === 'participants') return; // Embedded in the header layout & table
     
     // Title block
     rawBlocks.push({
