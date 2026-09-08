@@ -81,28 +81,66 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
   });
 
   const [visionStatus, setVisionStatus] = useState<'ONLINE' | 'PROCESSING' | 'QUOTA_WARNING' | 'QUOTA_EXCEEDED' | 'OFFLINE' | 'ERROR' | 'loading'>('loading');
+  const [connectingMessage, setConnectingMessage] = useState<string>('Connecting to Gemini AI...');
+  const [quotaCountdown, setQuotaCountdown] = useState<number | null>(null);
   const [extractionMethod, setExtractionMethod] = useState<string>('');
+
+  const checkHealth = async () => {
+    setVisionStatus('loading');
+    setConnectingMessage('Connecting to Gemini AI...');
+
+    const coldStartTimer = setTimeout(() => {
+      setConnectingMessage('Waking up AI backend (Cold Start)...');
+    }, 2500);
+
+    try {
+      const res = await fetch(`${API_URL}/api/autofill/health`);
+      clearTimeout(coldStartTimer);
+      const data = await res.json().catch(() => ({}));
+      
+      if (res.status === 429 || data.status === 'QUOTA_EXCEEDED') {
+        setVisionStatus('QUOTA_EXCEEDED');
+        setQuotaCountdown(data.retryAfter || 60);
+      } else if (data && data.status === 'QUOTA_WARNING') {
+        setVisionStatus('QUOTA_WARNING');
+      } else if (data && data.status === 'OFFLINE') {
+        setVisionStatus('OFFLINE');
+      } else if (!res.ok) {
+        setVisionStatus('OFFLINE');
+      } else {
+        setVisionStatus('ONLINE');
+        setQuotaCountdown(null);
+      }
+    } catch (error) {
+      clearTimeout(coldStartTimer);
+      console.error('Health check failed:', error);
+      setVisionStatus('OFFLINE');
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
-      setVisionStatus('loading');
-      fetch(`${API_URL}/api/autofill/health`)
-        .then(async res => {
-          const data = await res.json().catch(() => ({}));
-          if (data && data.status) {
-            setVisionStatus(data.status);
-          } else if (!res.ok) {
-            setVisionStatus('OFFLINE');
-          } else {
-            setVisionStatus('ONLINE');
-          }
-        })
-        .catch((error) => {
-          console.error('Health check failed:', error);
-          setVisionStatus('OFFLINE');
-        });
+      checkHealth();
     }
   }, [isOpen]);
+
+  // Quota Countdown ticker
+  useEffect(() => {
+    if (quotaCountdown === null || quotaCountdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setQuotaCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          checkHealth();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [quotaCountdown]);
 
   // Initialize modal state from Zustand store if the editor already contains data when opened
   useEffect(() => {
@@ -340,6 +378,12 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
       if (!store.isAutofillSessionActive(sessionId)) return;
 
+      if (result.quotaWarning) {
+        setVisionStatus('QUOTA_WARNING');
+      } else {
+        setVisionStatus('ONLINE');
+      }
+
       setExtractionMethod(result.ocrMethod);
       setExtractedData(result.extractedData as any);
       setFieldConfidence(result.confidenceMapping);
@@ -372,10 +416,11 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
         if (err.message === 'QUOTA_EXCEEDED') {
           setVisionStatus('QUOTA_EXCEEDED');
-          setErrorMsg("⚠️ Today's AI limit has been reached. Gemini Auto Fill is temporarily unavailable. Please try again later when the quota resets.");
+          setQuotaCountdown(err.retryAfter || 60);
+          setErrorMsg("⚠️ AI request quota limit reached. Cooldown is active. Auto Fill will resume shortly.");
         } else if (err.message === 'OFFLINE') {
           setVisionStatus('OFFLINE');
-          setErrorMsg("⚠️ AI Auto Fill is temporarily unavailable. Please check the connection or try again later.");
+          setErrorMsg("⚠️ AI Auto Fill is currently offline. Please check the backend service or GEMINI_API_KEY.");
         } else {
           setVisionStatus('ERROR');
           setErrorMsg(err.message || "Unable to process the document. Please verify the file and try again.");
@@ -596,18 +641,18 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
               <Sparkles className="w-5 h-5 text-accent-primary animate-pulse" />
               <span>Online Auto Fill Workspace</span>
               {visionStatus === 'ONLINE' && (
-                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI is connected and available for Auto Fill.">
+                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI (gemini-2.5-flash) is connected and available for Auto Fill.">
                   ● Gemini AI Online
                 </Badge>
               )}
               {visionStatus === 'QUOTA_WARNING' && (
                 <Badge variant="warning" className="text-[10px] ml-2 bg-amber-500/10 text-amber-500 border-amber-500/20 font-semibold animate-pulse" title="AI usage limit may be approaching.">
-                  ⚠️ Gemini AI Warning
+                  ⚠️ AI Limit Approaching
                 </Badge>
               )}
               {visionStatus === 'QUOTA_EXCEEDED' && (
-                <Badge variant="danger" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="Today's AI limit has been reached. Gemini Auto Fill is temporarily unavailable. Please try again later.">
-                  ⚠️ Today's AI limit has been reached
+                <Badge variant="danger" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="AI request quota reached. Auto-resuming shortly.">
+                  ⚠️ AI Quota Reached {quotaCountdown ? `(${quotaCountdown}s)` : ''}
                 </Badge>
               )}
               {visionStatus === 'PROCESSING' && (
@@ -616,7 +661,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                 </Badge>
               )}
               {visionStatus === 'OFFLINE' && (
-                <Badge variant="outline" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="AI Auto Fill is temporarily unavailable. Please check the connection or try again later.">
+                <Badge variant="outline" className="text-[10px] ml-2 bg-rose-500/10 text-rose-500 border-rose-500/20 font-semibold animate-pulse" title="AI Auto Fill is temporarily unavailable. Please check the backend connection or API key.">
                   ● Gemini AI Offline
                 </Badge>
               )}
@@ -626,8 +671,9 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                 </Badge>
               )}
               {visionStatus === 'loading' && (
-                <Badge variant="outline" className="text-[10px] ml-2 bg-slate-500/10 text-slate-500 border-slate-500/20 font-semibold animate-pulse">
-                  Checking AI Status...
+                <Badge variant="outline" className="text-[10px] ml-2 bg-sky-500/10 text-sky-500 border-sky-500/20 font-semibold animate-pulse flex items-center">
+                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  <span>{connectingMessage}</span>
                 </Badge>
               )}
             </h3>
@@ -647,6 +693,45 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
           {/* PANEL 1: POSTER UPLOAD (Left - 25%) */}
           <div className="w-full lg:w-[25%] p-5 border-b lg:border-b-0 lg:border-r border-surface-tertiary flex flex-col space-y-4 overflow-y-auto min-h-0 flex-shrink-0 bg-surface-primary">
             <h4 className="text-xs font-black uppercase tracking-wider text-text-primary">1. Document Upload</h4>
+
+            {/* Offline Status Alert Card */}
+            {visionStatus === 'OFFLINE' && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+                <div>
+                  <div className="font-bold text-[11px]">Gemini AI is Offline</div>
+                  <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
+                    Cannot reach AI backend. Please verify backend URL and <code className="font-mono text-[9px] bg-surface-secondary px-1 py-0.5 rounded">GEMINI_API_KEY</code>.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quota Warning Alert Card */}
+            {visionStatus === 'QUOTA_WARNING' && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                <div>
+                  <div className="font-bold text-[11px]">AI Limit Approaching</div>
+                  <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
+                    High request frequency detected. Please space out consecutive poster uploads.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quota Exceeded Alert Card */}
+            {visionStatus === 'QUOTA_EXCEEDED' && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+                <div>
+                  <div className="font-bold text-[11px]">AI Quota Limit Reached</div>
+                  <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
+                    Rate limit cooldown active. Auto-resuming in {quotaCountdown ?? 60}s...
+                  </div>
+                </div>
+              </div>
+            )}
             
             <input 
               type="file" 

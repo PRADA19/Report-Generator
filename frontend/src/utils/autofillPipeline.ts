@@ -54,6 +54,7 @@ export interface AutofillPipelineResult {
   generatedReport: any;
   confidenceMapping: Record<string, number>;
   ocrMethod: string;
+  quotaWarning?: boolean;
   rawResponse?: any;
 }
 
@@ -208,6 +209,7 @@ export async function executePosterAutofill(
   let apiGeneratedContent: any = null;
   let ocrMethod = '';
   let isFallback = false;
+  let rawApiResponse: any = null;
 
   // 3. Send poster to backend API
   try {
@@ -227,13 +229,19 @@ export async function executePosterAutofill(
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      if (errData.status === 'QUOTA_EXCEEDED' || errData.status === 'OFFLINE') {
-        throw new Error(errData.status);
+      if (errData.status === 'QUOTA_EXCEEDED' || response.status === 429) {
+        const error: any = new Error('QUOTA_EXCEEDED');
+        error.retryAfter = errData.retryAfter || 60;
+        throw error;
+      }
+      if (errData.status === 'OFFLINE' || response.status === 403 || response.status === 503) {
+        throw new Error('OFFLINE');
       }
       throw new Error(errData.error || 'API server unavailable.');
     }
 
     const resData = await response.json();
+    rawApiResponse = resData;
     console.log('[AUTO FILL 07] Frontend received data:', resData);
     if (isCancelled()) {
       throw new Error('Autofill session cancelled.');
@@ -460,6 +468,8 @@ export async function executePosterAutofill(
     extractedData,
     generatedReport,
     confidenceMapping: confMapping,
-    ocrMethod
+    ocrMethod,
+    quotaWarning: rawApiResponse?.quotaWarning || false,
+    rawResponse: rawApiResponse
   };
 }

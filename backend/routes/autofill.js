@@ -29,11 +29,16 @@ const rateLimitMiddleware = (req, res, next) => {
   const timestamps = ipLimits.get(ip);
   const activeTimestamps = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
   if (activeTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    lastGeminiStatus = 'QUOTA_EXCEEDED';
     return res.status(429).json({
-      error: 'Rate limit exceeded. Please wait a moment before trying again.',
+      status: 'QUOTA_EXCEEDED',
+      error: 'AI request limit reached. Please wait 60 seconds before trying again.',
+      retryAfter: 60,
       fallbackNeeded: true
     });
   }
+
+  req.isApproachingRateLimit = activeTimestamps.length >= 7;
   activeTimestamps.push(now);
   ipLimits.set(ip, activeTimestamps);
   next();
@@ -51,7 +56,7 @@ const authMiddleware = (req, res, next) => {
 };
 
 const getModelName = () => {
-  return process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 };
 
 function getLevenshteinDistance(s, t) {
@@ -581,12 +586,13 @@ router.post('/extract', rateLimitMiddleware, authMiddleware, upload.single('file
         venue: validatedFacts.venue ? 0.92 : 0.85,
         resourcePersons: validatedFacts.resourcePersons.length ? 0.96 : 0.85
       },
-      warnings: [],
+      warnings: req.isApproachingRateLimit ? ['APPROACHING_RATE_LIMIT'] : [],
+      quotaWarning: req.isApproachingRateLimit || false,
       ocrMethod: `Gemini Vision (${modelName})`
     };
 
     const finalResult = await applyHistoricalCorrections(mappedResult, fingerprint);
-    lastGeminiStatus = 'ONLINE';
+    lastGeminiStatus = req.isApproachingRateLimit ? 'QUOTA_WARNING' : 'ONLINE';
 
     console.log('[AUTO FILL 06] Final API response:', JSON.stringify(finalResult));
     return res.status(200).json(finalResult);
@@ -598,7 +604,7 @@ router.post('/extract', rateLimitMiddleware, authMiddleware, upload.single('file
     let status = 'ERROR';
     let userMessage = 'Unable to process the document with Gemini Vision. Please try again.';
     
-    if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('not authorized') || errMsg.includes('key is invalid')) {
+    if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('not authorized') || errMsg.includes('key is invalid') || errMsg.includes('403')) {
       status = 'OFFLINE';
       lastGeminiStatus = 'OFFLINE';
       userMessage = 'AI Auto Fill is temporarily unavailable due to API authorization.';
@@ -606,8 +612,8 @@ router.post('/extract', rateLimitMiddleware, authMiddleware, upload.single('file
     } else if (errMsg.includes('exhausted') || errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit')) {
       status = 'QUOTA_EXCEEDED';
       lastGeminiStatus = 'QUOTA_EXCEEDED';
-      userMessage = "AI request limit reached. Please try again later.";
-      return res.status(429).json({ success: false, sessionId, error: userMessage, status, details: errMsg });
+      userMessage = "AI request limit reached. Please wait a moment before trying again.";
+      return res.status(429).json({ success: false, sessionId, error: userMessage, status, retryAfter: 60, details: errMsg });
     }
 
     return res.status(500).json({
@@ -650,6 +656,10 @@ router.post('/feedback', async (req, res) => {
 router.get('/health', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = getModelName();
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const now = Date.now();
+  const timestamps = (ipLimits.get(ip) || []).filter(t => now - t < RATE_LIMIT_WINDOW);
+  const isApproachingLimit = timestamps.length >= 7;
 
   if (!apiKey || apiKey.trim() === '' || apiKey.includes('YOUR_GEMINI_API_KEY')) {
     lastGeminiStatus = 'OFFLINE';
@@ -662,47 +672,63 @@ router.get('/health', async (req, res) => {
     });
   }
 
+  // If rate limit window is actively saturated
+  if (lastGeminiStatus === 'QUOTA_EXCEEDED' && timestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    return res.status(429).json({
+      status: 'QUOTA_EXCEEDED',
+      provider: 'google',
+      model,
+      available: false,
+      retryAfter: 60,
+      message: "AI request quota reached. Please wait a moment."
+    });
+  }
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const m = genAI.getGenerativeModel({ model });
     await m.generateContent('ping');
-    lastGeminiStatus = 'ONLINE';
+    lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
     return res.json({
-      status: 'ONLINE',
+      status: lastGeminiStatus,
       provider: 'google',
       model,
       available: true,
-      message: `Gemini AI (${model}) is connected and online.`
+      quotaWarning: isApproachingLimit,
+      message: isApproachingLimit
+        ? `Gemini AI (${model}) is connected. High usage detected.`
+        : `Gemini AI (${model}) is connected and online.`
     });
   } catch (err) {
     const errMsg = err.message || '';
     if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
       lastGeminiStatus = 'QUOTA_EXCEEDED';
-      return res.json({
+      return res.status(429).json({
         status: 'QUOTA_EXCEEDED',
         provider: 'google',
         model,
         available: false,
+        retryAfter: 60,
         message: "Today's AI request quota has been reached."
       });
-    } else if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('404')) {
-      // If valid API key is present or fallback client-side is configured
-      lastGeminiStatus = 'ONLINE';
-      return res.json({
-        status: 'ONLINE',
+    } else if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('403') || errMsg.includes('not authorized') || errMsg.includes('key is invalid')) {
+      lastGeminiStatus = 'OFFLINE';
+      return res.status(403).json({
+        status: 'OFFLINE',
         provider: 'google',
         model,
-        available: true,
-        message: `Gemini AI is ready.`
+        available: false,
+        message: 'Invalid or unauthorized Gemini API Key.'
       });
     }
 
-    lastGeminiStatus = 'ONLINE';
+    lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
     return res.json({
-      status: 'ONLINE',
+      status: lastGeminiStatus,
       provider: 'google',
       model,
       available: true,
+      quotaWarning: isApproachingLimit,
       message: `Gemini AI is connected.`
     });
   }
