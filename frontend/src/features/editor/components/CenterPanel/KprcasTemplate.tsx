@@ -97,9 +97,10 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
       border: `${tableBorderWidthPx}px solid ${tableBorderColor}`
     };
 
+    const effectivePaddingPx = tablePaddingPx !== undefined ? Math.max(2, tablePaddingPx - 3) : 3;
     const cellStyle: React.CSSProperties = {
       border: `${tableBorderWidthPx}px solid ${tableBorderColor}`,
-      padding: '3px 6px',
+      padding: `${effectivePaddingPx}px 6px`,
       minHeight: '22px',
       verticalAlign: 'middle',
       lineHeight: 1.25
