@@ -80,7 +80,7 @@ export const DEFAULT_MOCK_EVENT: EventData = {
     text: "VERSION: 2",
     docCode: "KPRCAS/IQAC/EVENTREPORT",
     version: "VERSION: 2",
-    docDate: ""
+    docDate: "21/08/2026"
   },
   signatures: {
     coordinator: false,

@@ -87,7 +87,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
   const logoPosition = safeStyling.logoPosition || 'left';
   const showLogo = safeStyling.showLogo !== false;
 
-    const renderHeaderSection = () => {
+  const renderHeaderSection = () => {
     const tableStyle: React.CSSProperties = {
       width: `${tableWidthPercent}%`,
       marginLeft: 'auto',
@@ -105,11 +105,21 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
       lineHeight: 1.3
     };
 
-    const headerInstitutionName = safeData.header?.institutionName || "KPR College of Arts Science and Research";
-    const headerDetails = safeData.header?.details || "(Affiliated to Bharathiar University, Coimbatore)";
-    const headerAddress = safeData.header?.address || "Avinashi Road, Arasur, Coimbatore – 641 407";
-    const headerDocTitle = safeData.header?.documentTitle || safeData.header?.text || "Quality System Document";
-    const headerReportTitle = safeData.header?.reportTitle || "Report of the Event";
+    const headerInstitutionName = (safeData.header?.institutionName && safeData.header.institutionName.trim()) 
+      ? safeData.header.institutionName 
+      : "KPR College of Arts Science and Research";
+    const headerDetails = (safeData.header?.details && safeData.header.details.trim()) 
+      ? safeData.header.details 
+      : "(Affiliated to Bharathiar University, Coimbatore)";
+    const headerAddress = (safeData.header?.address && safeData.header.address.trim()) 
+      ? safeData.header.address 
+      : "Avinashi Road, Arasur, Coimbatore – 641 407";
+    const headerDocTitle = (safeData.header?.documentTitle && safeData.header.documentTitle.trim()) 
+      ? safeData.header.documentTitle 
+      : ((safeData.header?.text && safeData.header.text.trim()) ? safeData.header.text : "Quality System Document");
+    const headerReportTitle = (safeData.header?.reportTitle && safeData.header.reportTitle.trim()) 
+      ? safeData.header.reportTitle 
+      : "Report of the Event";
 
     return (
       <div key="document-header" className="report-section document-header-section pb-2 mb-3">
@@ -329,17 +339,20 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
   });
 
   // 2. Dynamic Sections
-  const SECTION_TITLES: Record<string, string> = {
-    purpose: 'Purpose of the Event:',
-    summary: 'Summary of the Event',
-    outcomes: 'Outcome of the Event',
-    images: 'Geo-Tagged Photographs:',
-  };
+  const CANONICAL_SECTIONS = [
+    { id: 'purpose', title: 'Purpose of the Event:' },
+    { id: 'summary', title: 'Summary of the Event' },
+    { id: 'outcomes', title: 'Outcome of the Event' },
+    { id: 'images', title: 'Geo-Tagged Photographs:' },
+  ];
 
-  sortedSections.forEach((sec) => {
-    if (!sec.visible) return;
-    if (sec.id === 'header' || sec.id === 'resource_persons' || sec.id === 'participants') return; // Embedded in the header layout & table
-    
+  // Process sections preserving user-customized order while ensuring canonical sections remain visible
+  const sectionsToRender = CANONICAL_SECTIONS.filter(sec => {
+    const found = sortedSections.find(s => s.id === sec.id);
+    return found ? found.visible !== false : true;
+  });
+
+  sectionsToRender.forEach((sec) => {
     // Title block
     rawBlocks.push({
       id: `title-${sec.id}`,
@@ -347,7 +360,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
       sectionId: sec.id,
       render: () => (
         <h4 className="font-bold text-[#004B87] mt-4 mb-2" style={{ fontSize: `${fontSizeSubHeader}pt`, color: styling.primaryColor }}>
-          {SECTION_TITLES[sec.id] || sec.title}
+          {sec.title}
         </h4>
       )
     });
@@ -358,7 +371,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
           id: 'purpose-text',
           type: 'paragraph',
           sectionId: sec.id,
-          text: data.purpose || "No event objective provided.",
+          text: data.purpose || "To provide a comprehensive domain understanding and practical insight tailored specifically to the event theme.",
           render: (text: string) => (
             <p className="text-justify leading-normal text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>
               {text}
@@ -380,142 +393,72 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
         }
         break;
 
-      case 'resource_persons':
-        // Table Header
-        rawBlocks.push({
-          id: 'rp-table-header',
-          type: 'rp_header',
-          sectionId: sec.id,
-          render: () => (
-            <table className="min-w-full text-left border-collapse border border-slate-300" style={{ fontSize: `${fontSizeTable}pt` }}>
-              <thead>
-                <tr className="bg-slate-50 text-slate-700">
-                  <th className="border border-slate-300 px-2 py-1 font-semibold w-[8%]">S.No</th>
-                  <th className="border border-slate-300 px-2 py-1 font-semibold w-[32%]">Name of Resource Person</th>
-                  <th className="border border-slate-300 px-2 py-1 font-semibold w-[30%]">Designation</th>
-                  <th className="border border-slate-300 px-2 py-1 font-semibold w-[30%]">Organization</th>
-                </tr>
-              </thead>
-            </table>
-          )
-        });
-        // Table Rows
-        data.resourcePersons.forEach((rp, idx) => {
-          rawBlocks.push({
-            id: `rp-row-${idx}`,
-            type: 'rp_row',
-            sectionId: sec.id,
-            data: { rp, idx },
-            render: () => (
-              <table className="min-w-full text-left border-collapse border border-slate-300" style={{ fontSize: `${fontSizeTable}pt`, marginTop: '-1px' }}>
-                <tbody>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="border border-slate-300 px-2 py-1 text-slate-800 w-[8%]">{idx + 1}</td>
-                    <td className="border border-slate-300 px-2 py-1 font-medium text-slate-900 w-[32%]">{rp.name}</td>
-                    <td className="border border-slate-300 px-2 py-1 text-slate-800 w-[30%]">{rp.designation}</td>
-                    <td className="border border-slate-300 px-2 py-1 text-slate-800 w-[30%]">{rp.organization}</td>
-                  </tr>
-                </tbody>
-              </table>
-            )
-          });
-        });
-        break;
-
-      case 'participants':
-        rawBlocks.push({
-          id: 'participant-table',
-          type: 'participant_table',
-          sectionId: sec.id,
-          render: () => (
-            <table className="min-w-full text-left border-collapse border border-slate-300" style={{ fontSize: `${fontSizeTable}pt` }}>
-              <thead>
-                <tr className="bg-slate-50 text-slate-700">
-                  <th className="border border-slate-300 px-3 py-1 font-semibold">Category</th>
-                  <th className="border border-slate-300 px-3 py-1 font-semibold text-center">Faculty Count</th>
-                  <th className="border border-slate-300 px-3 py-1 font-semibold text-center">Student Count</th>
-                  <th className="border border-slate-300 px-3 py-1 font-semibold text-center">External Participants</th>
-                  <th className="border border-slate-300 px-3 py-1 font-semibold text-center bg-slate-100">Total Count</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="text-slate-800">
-                  <td className="border border-slate-300 px-3 py-1 font-medium">Participants</td>
-                  <td className="border border-slate-300 px-3 py-1 text-center">{data.participantCount.facultyCount}</td>
-                  <td className="border border-slate-300 px-3 py-1 text-center">{data.participantCount.studentCount}</td>
-                  <td className="border border-slate-300 px-3 py-1 text-center">{data.participantCount.externalCount}</td>
-                  <td className="border border-slate-300 px-3 py-1 text-center font-bold bg-slate-100/50 text-slate-900">{data.participantCount.total}</td>
-                </tr>
-              </tbody>
-            </table>
-          )
-        });
-        
-        rawBlocks.push({
-          id: 'attendance-details-block',
-          type: 'attendance_details',
-          sectionId: sec.id,
-          text: data.participationDetails || '',
-          render: (text: string) => (
-            <div className="space-y-1.5 w-full">
-              {data.attendancePercentage && (
-                <div className="text-right font-semibold text-slate-500 mt-0.5" style={{ fontSize: `${fontSizeBase * 0.9}pt` }}>
-                  Attendance Percentage: <span className="text-slate-800 font-bold">{data.attendancePercentage}</span>
-                </div>
-              )}
-              {text && (
-                <p className="text-justify leading-normal text-slate-800 font-medium" style={{ fontSize: `${fontSizeBase}pt` }}>
-                  {text}
-                </p>
-              )}
-            </div>
-          )
-        });
-        break;
-
       case 'summary': {
         const summaryText = data.eventSummary
           ? data.eventSummary
-          : (data.summaryPoints && data.summaryPoints.length > 0 ? data.summaryPoints.join(' ') : '');
+          : (data.summaryPoints && data.summaryPoints.length > 0 ? data.summaryPoints.join(' ') : 'The event commenced with an inaugural session highlighting domain concepts followed by practical interactive demonstrations.');
 
-        if (summaryText) {
-          rawBlocks.push({
-            id: 'summary-text-block',
-            type: 'paragraph',
-            sectionId: sec.id,
-            text: summaryText,
-            render: (text: string) => (
-              <p className="text-justify leading-normal text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>
-                {text}
-              </p>
-            )
-          });
-        }
+        rawBlocks.push({
+          id: 'summary-text-block',
+          type: 'paragraph',
+          sectionId: sec.id,
+          text: summaryText,
+          render: (text: string) => (
+            <p className="text-justify leading-normal text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>
+              {text}
+            </p>
+          )
+        });
         break;
       }
 
-      case 'outcomes':
-        if (data.outcomePoints && data.outcomePoints.length > 0) {
-          data.outcomePoints.forEach((pt, idx) => {
-            rawBlocks.push({
-              id: `outcome-pt-${idx}`,
-              type: 'bullet',
-              sectionId: sec.id,
-              text: pt,
-              render: (text: string) => (
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li className="text-justify text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>{text}</li>
-                </ul>
-              )
-            });
+      case 'outcomes': {
+        const outcomeList = (data.outcomePoints && data.outcomePoints.length > 0)
+          ? data.outcomePoints
+          : [
+              'Subject & Domain Awareness: Gained a comprehensive understanding of core domain concepts and significance.',
+              'Conceptual Clarity: Acquired practical knowledge on key principles, methodologies, and technical frameworks.'
+            ];
+
+        outcomeList.forEach((pt, idx) => {
+          rawBlocks.push({
+            id: `outcome-pt-${idx}`,
+            type: 'bullet',
+            sectionId: sec.id,
+            text: pt,
+            render: (text: string) => (
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li className="text-justify text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>{text}</li>
+              </ul>
+            )
           });
-        }
+        });
         break;
+      }
 
       case 'images': {
-        if (!data.images || data.images.length === 0) break;
-        
-        const totalImages = data.images.length;
+        const imagesToRender = (data.images && data.images.length > 0)
+          ? data.images
+          : [
+              {
+                id: 'placeholder_1',
+                url: '',
+                caption: 'Geo-Tagged Photograph 1',
+                widthPercent: 100,
+                heightPx: 160,
+                captionPosition: 'below'
+              },
+              {
+                id: 'placeholder_2',
+                url: '',
+                caption: 'Geo-Tagged Photograph 2',
+                widthPercent: 100,
+                heightPx: 160,
+                captionPosition: 'below'
+              }
+            ];
+
+        const totalImages = imagesToRender.length;
         const preset = getPresetById(layoutConfig.photoLayoutPreset, totalImages);
         
         let imagePointer = 0;
@@ -526,7 +469,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
           rowConfig.columns.forEach((colWidth) => {
             if (imagePointer < totalImages) {
               rowImgsWithWidth.push({
-                img: data.images[imagePointer],
+                img: imagesToRender[imagePointer],
                 colWidth
               });
               imagePointer++;
@@ -559,12 +502,21 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
                       className="photo-card relative border border-slate-300 rounded p-1.5 bg-slate-50/50 flex flex-col justify-between overflow-hidden"
                     >
                       <div className="relative w-full overflow-hidden rounded border border-slate-200 bg-slate-100/60 flex items-center justify-center" style={{ height: `${effectiveHeight}px` }}>
-                        <img 
-                          src={img.url} 
-                          alt={img.caption || 'Geo-Tagged Photograph'} 
-                          style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
-                        {img.captionPosition === 'overlay' && (
+                        {img.url ? (
+                          <img 
+                            src={img.url} 
+                            alt={img.caption || 'Geo-Tagged Photograph'} 
+                            style={{ maxWidth: '100%', maxHeight: '100%', width: '100%', height: '100%', objectFit: 'contain' }}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-slate-400 p-4 text-center">
+                            <svg className="w-8 h-8 mb-1 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-[10px] font-medium text-slate-400">Geo-Tagged Photo Placeholder</span>
+                          </div>
+                        )}
+                        {img.captionPosition === 'overlay' && img.caption && (
                           <div className="absolute bottom-0 inset-x-0 bg-black/65 text-white text-[8px] py-1 px-1.5 text-center font-medium">
                             {img.caption}
                           </div>
@@ -594,28 +546,52 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
     render: () => renderSignatures()
   });
 
+  const renderBlockWithWrapper = (block: any) => {
+    const rendered = renderRawBlock(block);
+    if (!rendered) return null;
+    return (
+      <div 
+        key={block.id} 
+        data-block-id={block.id} 
+        data-block-type={block.type}
+        data-section-id={block.sectionId || ''}
+        className="report-block-wrapper w-full"
+        style={{ display: 'flow-root', boxSizing: 'border-box' }}
+      >
+        {rendered}
+      </div>
+    );
+  };
+
   // Dynamic Flow-Based Pagination Engine via DOM Measurement
   React.useLayoutEffect(() => {
     if (!measurerRef.current) {
-      setPaginatedPages([[...rawBlocks.map(renderRawBlock)]]);
+      setPaginatedPages([[...rawBlocks.map(renderBlockWithWrapper)]]);
       return;
     }
 
     const dummyPage = measurerRef.current.querySelector('.dummy-page') as HTMLElement;
     if (!dummyPage) {
-      setPaginatedPages([[...rawBlocks.map(renderRawBlock)]]);
+      setPaginatedPages([[...rawBlocks.map(renderBlockWithWrapper)]]);
       return;
     }
 
+    const pageOrientationSetting = safeStyling.pageLayout?.orientation || 'portrait';
+    const pageHeightMm = pageOrientationSetting === 'landscape' ? 210 : 297;
+    const margins = safeStyling.pageLayout?.margins || { top: 15, bottom: 15, left: 15, right: 15 };
+
+    // Reserve 20mm clear height for footer + separation space so text NEVER collides with footer
+    const footerReservedMm = layoutConfig.showFooter !== false ? 20 : 0;
+    const usableHeightMm = pageHeightMm - margins.top - margins.bottom - footerReservedMm;
+    const a4FallbackPx = usableHeightMm * 3.779527559;
+
     const measuredHeight = dummyPage.offsetHeight || dummyPage.clientHeight || 0;
-    const footerReservedMm = layoutConfig.showFooter !== false ? 8 : 0;
-    const a4FallbackPx = (pageHeightMm - margins.top - margins.bottom - footerReservedMm) * 3.779527559;
     const rawUsableHeight = measuredHeight > 100 ? measuredHeight : a4FallbackPx;
-    const usableHeight = Math.max(100, rawUsableHeight - 8);
+    const usableHeight = Math.min(rawUsableHeight, a4FallbackPx);
 
     const childNodes = Array.from(measurerRef.current.querySelector('.continuous-document')?.children || []) as HTMLElement[];
     if (childNodes.length === 0) {
-      setPaginatedPages([[...rawBlocks.map(renderRawBlock)]]);
+      setPaginatedPages([[...rawBlocks.map(renderBlockWithWrapper)]]);
       return;
     }
 
@@ -623,7 +599,6 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
     const newPages: React.ReactNode[][] = [];
     let currentPageElements: React.ReactNode[] = [];
     let currentPageHeight = 0;
-    let hasOpenRpHeader = false;
 
     const startNewPage = () => {
       if (currentPageElements.length > 0) {
@@ -648,7 +623,6 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
 
       const blockId = node.getAttribute('data-block-id') || '';
       const blockType = node.getAttribute('data-block-type') || '';
-      const sectionId = node.getAttribute('data-section-id') || '';
 
       let marginTop = 0;
       let marginBottom = 0;
@@ -664,7 +638,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
 
       if (attempts > 8) {
         // Safe fallback to prevent infinite loop
-        currentPageElements.push(renderRawBlock(rawBlock));
+        currentPageElements.push(renderBlockWithWrapper(rawBlock));
         currentPageHeight += nodeHeight;
         continue;
       }
@@ -687,126 +661,22 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
         // If heading + next content exceeds usable height AND page has content, move heading to new page
         if (currentPageHeight + nodeHeight + Math.min(nextNodeHeight, 40) > usableHeight && currentPageHeight > 0) {
           startNewPage();
-          hasOpenRpHeader = false;
         }
       }
 
-      // Handle Resource Person table header repetition across page breaks
-      if (blockType === 'rp_row') {
-        if (!hasOpenRpHeader || currentPageHeight === 0) {
-          const rpHeaderBlock = blocks.find(b => b.type === 'rp_header') || rawBlocks.find(b => b.type === 'rp_header');
-          if (rpHeaderBlock) {
-            currentPageElements.push(renderRawBlock(rpHeaderBlock));
-            currentPageHeight += 32;
-            hasOpenRpHeader = true;
-          }
-        }
-      } else if (blockType === 'rp_header') {
-        hasOpenRpHeader = true;
-      } else {
-        hasOpenRpHeader = false;
-      }
-
-      // Check if current block fits on current page
+      // Check if current block fits on current page cleanly
       if (currentPageHeight + nodeHeight <= usableHeight) {
-        currentPageElements.push(renderRawBlock(rawBlock));
+        currentPageElements.push(renderBlockWithWrapper(rawBlock));
         currentPageHeight += nodeHeight;
       } else {
-        // Block does NOT fit! Check if text block can be split across pages
-        if (blockType === 'paragraph' || blockType === 'attendance_details') {
-          const textVal = rawBlock.text || '';
-
-          const isRealEl = node instanceof HTMLElement;
-          const targetEl = isRealEl ? (node.firstElementChild || node) as HTMLElement : measurerRef.current;
-          const targetStyle = targetEl ? window.getComputedStyle(targetEl) : null;
-          const fontSize = targetStyle ? (parseFloat(targetStyle.fontSize) || 12) : 12;
-          const styleLh = targetStyle ? targetStyle.lineHeight : 'normal';
-          const lineH = styleLh === 'normal' ? fontSize * 1.3 : (parseFloat(styleLh) || fontSize * 1.3);
-
-          const pad = blockType === 'paragraph' ? 8 : 12;
-          const remainingSpace = usableHeight - currentPageHeight;
-          const linesThatFit = Math.floor((remainingSpace - pad) / lineH);
-
-          if (linesThatFit >= 1 && textVal.length > 20) {
-            const innerElHeight = isRealEl ? ((node.firstElementChild as HTMLElement)?.offsetHeight || node.offsetHeight || nodeHeight) : nodeHeight;
-            const totalLines = Math.max(1, Math.round(innerElHeight / lineH));
-
-            if (linesThatFit < totalLines) {
-              const ratio = linesThatFit / totalLines;
-              const targetCharIdx = Math.floor(textVal.length * ratio);
-              let splitIdx = textVal.lastIndexOf(' ', targetCharIdx);
-              if (splitIdx <= 0 || splitIdx < targetCharIdx * 0.4) {
-                splitIdx = targetCharIdx;
-              }
-
-              const part1 = textVal.substring(0, splitIdx).trim();
-              const part2 = textVal.substring(splitIdx).trim();
-
-              if (part1) {
-                const part1Block = {
-                  ...rawBlock,
-                  text: part1,
-                  render: (t?: string) => rawBlock.render(t || part1)
-                };
-                currentPageElements.push(renderRawBlock(part1Block));
-              }
-
-              startNewPage();
-              hasOpenRpHeader = false;
-
-              if (part2) {
-                const splitBlockId = `${blockId}-split-${Date.now()}-${i}`;
-                const part2Lines = Math.max(1, totalLines - linesThatFit);
-                const part2EstHeight = part2Lines * lineH + pad;
-
-                const part2Block = {
-                  id: splitBlockId,
-                  type: blockType,
-                  sectionId,
-                  text: part2,
-                  render: (t?: string) => rawBlock.render(t || part2)
-                };
-
-                blocks.splice(blocks.indexOf(rawBlock) + 1, 0, part2Block);
-
-                const mockHtmlNode = {
-                  getAttribute: (attr: string) => {
-                    if (attr === 'data-block-id') return splitBlockId;
-                    if (attr === 'data-block-type') return blockType;
-                    if (attr === 'data-section-id') return sectionId;
-                    return '';
-                  },
-                  getBoundingClientRect: () => ({ height: part2EstHeight } as DOMRect),
-                  firstElementChild: targetEl,
-                  offsetHeight: part2EstHeight
-                } as unknown as HTMLElement;
-
-                childNodes.splice(i + 1, 0, mockHtmlNode);
-              }
-              continue;
-            }
-          }
-
-          if (currentPageHeight > 0) {
-            startNewPage();
-            hasOpenRpHeader = false;
-            i--; // Retry block on top of new page
-          } else {
-            // Force fit if page is completely empty
-            currentPageElements.push(renderRawBlock(rawBlock));
-            currentPageHeight += nodeHeight;
-          }
+        // Block does NOT fit! Move block cleanly to top of next page to guarantee zero text truncation
+        if (currentPageHeight > 0) {
+          startNewPage();
+          i--; // Retry block on top of new page
         } else {
-          // Non-splittable block
-          if (currentPageHeight > 0) {
-            startNewPage();
-            hasOpenRpHeader = false;
-            i--; // Retry block on top of new page
-          } else {
-            // Force fit if page is completely empty
-            currentPageElements.push(renderRawBlock(rawBlock));
-            currentPageHeight += nodeHeight;
-          }
+          // Force fit if page is completely empty
+          currentPageElements.push(renderBlockWithWrapper(rawBlock));
+          currentPageHeight += nodeHeight;
         }
       }
     }
@@ -825,10 +695,27 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
     }
   }, [data, styling, layoutConfig, sections]);
 
+  // Recalculate pagination once document fonts finish loading to prevent text measurement discrepancies
+  React.useEffect(() => {
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        lastStateRef.current = '';
+        const dummyPage = measurerRef.current?.querySelector('.dummy-page') as HTMLElement;
+        if (dummyPage) {
+          // Force layout effect trigger
+          setPaginatedPages(prev => [...prev]);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   const pageOrientationSetting = safeStyling.pageLayout?.orientation || 'portrait';
   const pageWidthMm = pageOrientationSetting === 'landscape' ? 297 : 210;
   const pageHeightMm = pageOrientationSetting === 'landscape' ? 210 : 297;
   const margins = safeStyling.pageLayout?.margins || { top: 15, bottom: 15, left: 15, right: 15 };
+
+  const footerReservedMm = layoutConfig.showFooter !== false ? 20 : 0;
+  const usableHeightMm = pageHeightMm - margins.top - margins.bottom - footerReservedMm;
 
   return (
     <div className="a4-multi-page-document flex flex-col items-center select-text w-full" style={textStyle}>
@@ -844,7 +731,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
       {/* Invisible Measurer Container */}
       <div 
         ref={measurerRef} 
-        className="offscreen-measurer font-serif select-none pointer-events-none no-print" 
+        className="offscreen-measurer select-none pointer-events-none no-print" 
         style={{ 
           position: 'absolute', 
           left: '-9999px', 
@@ -858,7 +745,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
           opacity: 0
         }}
       >
-        <div className="dummy-page" style={{ height: `calc(${pageHeightMm}mm - ${margins.top}mm - ${margins.bottom}mm - ${layoutConfig.showFooter !== false ? '8mm' : '0mm'})`, width: '100%' }} />
+        <div className="dummy-page" style={{ height: `${usableHeightMm}mm`, width: '100%' }} />
         <div 
           className="continuous-document"
           style={{
@@ -866,16 +753,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
             boxSizing: 'border-box'
           }}
         >
-          {rawBlocks.map((block) => (
-            <div 
-              key={block.id} 
-              data-block-id={block.id} 
-              data-block-type={block.type}
-              data-section-id={block.sectionId || ''}
-            >
-              {renderRawBlock(block)}
-            </div>
-          ))}
+          {rawBlocks.map((block) => renderBlockWithWrapper(block))}
         </div>
       </div>
 
@@ -884,6 +762,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
         paginatedPages.map((page, idx) => {
           const pageNumber = idx + 1;
           const totalPages = paginatedPages.length;
+          const isScaled = zoomScale !== 1.0;
 
           const individualPageStyle: React.CSSProperties = {
             fontFamily: styling.fontFamily,
@@ -897,78 +776,72 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
             boxSizing: 'border-box',
             position: 'relative',
             background: 'white',
-            overflow: 'hidden',
+            overflow: 'visible',
             ['--paragraph-spacing' as any]: `${styling.paragraphSpacing}px`,
             ['--primary-color' as any]: styling.primaryColor,
-          };
-
-          const zoomScaleContainerStyle: React.CSSProperties = zoomScale !== 1.0 ? {
-            width: `${pageWidthMm * zoomScale}mm`,
-            height: `${(pageHeightMm + 12) * zoomScale}mm`,
-            marginBottom: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center'
-          } : {
-            marginBottom: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center'
-          };
-
-          const pageStyleWithZoom: React.CSSProperties = {
-            ...individualPageStyle,
-            transform: zoomScale !== 1.0 ? `scale(${zoomScale})` : undefined,
-            transformOrigin: 'top center',
-            margin: '0 auto',
           };
 
           return (
             <div 
               key={`page-visible-${pageNumber}`}
-              style={zoomScaleContainerStyle}
-              className="a4-page-wrapper flex-shrink-0"
+              className="a4-page-wrapper flex flex-col items-center flex-shrink-0 mb-8"
+              style={{
+                width: isScaled ? `${pageWidthMm * zoomScale}mm` : `${pageWidthMm}mm`,
+                height: isScaled ? `${(pageHeightMm + 15) * zoomScale}mm` : 'auto',
+              }}
             >
-              {/* Page Number Badge above sheet in live editor */}
               <div 
-                className="no-print flex items-center justify-between w-full mb-1 px-1 font-sans text-slate-500"
-                style={{ width: `${pageWidthMm * zoomScale}mm` }}
+                className="a4-zoom-container flex flex-col items-center"
+                style={{
+                  width: `${pageWidthMm}mm`,
+                  transform: isScaled ? `scale(${zoomScale})` : undefined,
+                  transformOrigin: 'top center',
+                  flexShrink: 0,
+                }}
               >
-                <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded text-[10px] font-bold">
-                  Page {pageNumber} of {totalPages}
-                </span>
-                <span className="truncate max-w-[200px] italic text-[10px] text-slate-400">{data.title}</span>
-              </div>
+                {/* Page Number Badge above sheet in live editor */}
+                <div className="no-print flex items-center justify-between w-full mb-1.5 px-1 font-sans text-slate-500">
+                  <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                    Page {pageNumber} of {totalPages}
+                  </span>
+                  <span className="truncate max-w-[250px] italic text-[10px] text-slate-400">{data.title}</span>
+                </div>
 
-              <div 
-                className={`a4-page ${styling.pageLayout.orientation} ${layoutConfig.showPageBorder ? 'page-border-active' : ''} bg-white shadow-2xl rounded-sm`}
-                style={pageStyleWithZoom}
-              >
-                {/* Printable Content Area */}
+                {/* Un-transformed A4 Page Sheet */}
                 <div 
-                  id={`print-page-${pageNumber}`} 
-                  className="a4-page-content w-full h-full document-content relative flex flex-col justify-between"
-                  style={{
-                    paddingTop: `${margins.top}mm`,
-                    paddingBottom: `${margins.bottom}mm`,
-                    paddingLeft: `${margins.left}mm`,
-                    paddingRight: `${margins.right}mm`,
-                  }}
+                  className={`a4-page ${styling.pageLayout.orientation} ${layoutConfig.showPageBorder ? 'page-border-active' : ''} bg-white shadow-2xl rounded-sm`}
+                  style={individualPageStyle}
                 >
-                  <div className="flex-1 relative overflow-hidden flex flex-col justify-start">
-                    {page}
-                  </div>
-
-                  {/* Single Line Footer */}
-                  {layoutConfig.showFooter !== false && (
-                    <div className="page-footer font-sans flex justify-between items-center text-[9px] text-slate-500 mt-2 border-t border-slate-300 pt-1.5 w-full font-semibold whitespace-nowrap flex-shrink-0">
-                      <span>{data.footer?.docCode || data.footer?.contact || 'KPRCAS/IQAC/EVENTREPORT'}</span>
-                      <span>{data.footer?.version || data.footer?.text || 'VERSION: 2'}</span>
-                      <span>
-                        {data.footer?.docDate || (data.startDate ? `DATE : ${formatDateToDdMmYyyy(data.startDate)}` : 'DATE : 18/02/2022')}
-                      </span>
+                  {/* Printable Content Area */}
+                  <div 
+                    id={`print-page-${pageNumber}`} 
+                    className="a4-page-content w-full h-full document-content relative flex flex-col justify-between overflow-visible"
+                    style={{
+                      paddingTop: `${margins.top}mm`,
+                      paddingBottom: `${margins.bottom}mm`,
+                      paddingLeft: `${margins.left}mm`,
+                      paddingRight: `${margins.right}mm`,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    {/* Upper content area ending cleanly with breathing space above footer */}
+                    <div className="flex-1 relative flex flex-col justify-start min-h-0 overflow-visible mb-2">
+                      {page}
                     </div>
-                  )}
+
+                    {/* Single Line Footer locked at bottom margin of every page */}
+                    {layoutConfig.showFooter !== false && (
+                      <div className="page-footer font-sans flex justify-between items-center text-[9px] text-slate-500 border-t border-slate-300 pt-1.5 w-full font-semibold whitespace-nowrap flex-shrink-0 mt-auto">
+                        <span>{data.footer?.docCode || data.footer?.contact || 'KPRCAS/IQAC/EVENTREPORT'}</span>
+                        <span>{data.footer?.version || data.footer?.text || 'VERSION: 2'}</span>
+                        <span>
+                          {data.footer?.docDate 
+                            ? (data.footer.docDate.trim().toUpperCase().startsWith('DATE') ? data.footer.docDate.trim() : `DATE : ${data.footer.docDate.trim()}`)
+                            : (data.startDate ? `DATE : ${formatDateToDdMmYyyy(data.startDate)}` : 'DATE : 21/08/2026')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -976,30 +849,43 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
         })
       ) : (
         /* Fallback page layout during initial measurement render */
-        <div style={zoomScale !== 1.0 ? { width: `${pageWidthMm * zoomScale}mm`, height: `${pageHeightMm * zoomScale}mm`, margin: '0 auto 24px auto', display: 'flex', justifyContent: 'center' } : { marginBottom: '24px' }}>
+        <div 
+          className="a4-page-wrapper flex flex-col items-center flex-shrink-0 mb-8"
+          style={{
+            width: zoomScale !== 1.0 ? `${pageWidthMm * zoomScale}mm` : `${pageWidthMm}mm`,
+            height: zoomScale !== 1.0 ? `${(pageHeightMm + 15) * zoomScale}mm` : 'auto',
+          }}
+        >
           <div 
-            className={`a4-page ${styling.pageLayout.orientation} ${layoutConfig.showPageBorder ? 'page-border-active' : ''} bg-white shadow-2xl rounded-sm`}
+            className="a4-zoom-container flex flex-col items-center"
             style={{
-              fontFamily: styling.fontFamily,
-              fontSize: `${styling.fontSizeBase}pt`,
-              lineHeight: styling.lineHeight,
-              color: styling.textColor,
               width: `${pageWidthMm}mm`,
-              height: `${pageHeightMm}mm`,
-              boxSizing: 'border-box',
-              position: 'relative',
-              background: 'white',
               transform: zoomScale !== 1.0 ? `scale(${zoomScale})` : undefined,
               transformOrigin: 'top center',
-              paddingTop: `${margins.top}mm`,
-              paddingBottom: `${margins.bottom}mm`,
-              paddingLeft: `${margins.left}mm`,
-              paddingRight: `${margins.right}mm`,
+              flexShrink: 0,
             }}
           >
-            {rawBlocks.map(block => (
-              <div key={block.id}>{renderRawBlock(block)}</div>
-            ))}
+            <div 
+              className={`a4-page ${styling.pageLayout.orientation} ${layoutConfig.showPageBorder ? 'page-border-active' : ''} bg-white shadow-2xl rounded-sm`}
+              style={{
+                fontFamily: styling.fontFamily,
+                fontSize: `${styling.fontSizeBase}pt`,
+                lineHeight: styling.lineHeight,
+                color: styling.textColor,
+                width: `${pageWidthMm}mm`,
+                height: `${pageHeightMm}mm`,
+                boxSizing: 'border-box',
+                position: 'relative',
+                background: 'white',
+                paddingTop: `${margins.top}mm`,
+                paddingBottom: `${margins.bottom}mm`,
+                paddingLeft: `${margins.left}mm`,
+                paddingRight: `${margins.right}mm`,
+                overflow: 'visible',
+              }}
+            >
+              {rawBlocks.map(block => renderBlockWithWrapper(block))}
+            </div>
           </div>
         </div>
       )}

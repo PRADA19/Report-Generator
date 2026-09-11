@@ -14,7 +14,8 @@ if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 }
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const DEFAULT_API_URL = 'https://report-generator-lok5.onrender.com';
+const API_URL = (import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
 
 export interface AutofillPipelineOptions {
   sessionId?: string;
@@ -214,6 +215,7 @@ export async function executePosterAutofill(
   // 3. Send poster to backend API
   try {
     const formData = new FormData();
+    formData.append('poster', processedBlob, file.name.replace(/\.pdf$/i, '.png'));
     formData.append('file', processedBlob, file.name.replace(/\.pdf$/i, '.png'));
     formData.append('sessionId', sessionId);
 

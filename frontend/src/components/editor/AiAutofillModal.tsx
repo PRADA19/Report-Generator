@@ -14,7 +14,8 @@ import { executePosterAutofill, formatToInputDate, type ExtractedPosterFields } 
 // Load pdf.js worker globally using cdnjs fallback to prevent bundle pathing failures
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const DEFAULT_API_URL = 'https://report-generator-lok5.onrender.com';
+const API_URL = (import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
 
 interface AiAutofillModalProps {
   isOpen: boolean;
@@ -1050,7 +1051,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                   styling={storeStyling}
                   layoutConfig={storeLayoutConfig}
                   sections={storeSections}
-                  zoomScale={0.46}
+                  zoomScale={0.42}
                 />
               </div>
             )}

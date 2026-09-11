@@ -72,6 +72,13 @@
   overflow: visible;
 }
 
+/* Block container wrapper to contain child margins cleanly */
+.report-block-wrapper {
+  display: flow-root;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* Page footer styling */
 .page-footer {
   position: relative;
@@ -261,5 +268,5 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }

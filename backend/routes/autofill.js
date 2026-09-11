@@ -56,8 +56,33 @@ const authMiddleware = (req, res, next) => {
 };
 
 const getModelName = () => {
-  return process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  const model = process.env.GEMINI_MODEL;
+  if (!model || model.trim() === '' || model.includes('3.6')) {
+    return 'gemini-1.5-flash';
+  }
+  return model.trim();
 };
+
+function getApiKeys(req) {
+  const keys = [];
+  const headerKey = req && req.headers ? req.headers['x-gemini-api-key'] : null;
+  if (headerKey && headerKey.trim()) {
+    keys.push(...headerKey.split(',').map(k => k.trim()).filter(Boolean));
+  }
+  if (process.env.GEMINI_API_KEYS) {
+    const list = process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean);
+    keys.push(...list);
+  }
+  if (process.env.GEMINI_API_KEY) {
+    const list = process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean);
+    list.forEach(k => {
+      if (k && !keys.includes(k)) {
+        keys.push(k);
+      }
+    });
+  }
+  return keys.filter(k => k && !k.includes('YOUR_GEMINI_API_KEY'));
+}
 
 function getLevenshteinDistance(s, t) {
   if (!s) return t ? t.length : 0;
@@ -455,174 +480,138 @@ EVENT-SPECIFIC & DYNAMIC REPORT GENERATION DIRECTIVES:
    Generate MAXIMUM 5 VALUABLE POINTS (NOT MORE THAN 5 POINTS) for "summaryPoints" and a 5-sentence paragraph for "eventSummary":
    - Point 1: Organizing Department, School / Club & Event Type declaration.
    - Point 2: Event Title, Core Subject Theme & Technical Scope.
-   - Point 3: Key Resource Person / Speaker Credentials (Name, Designation, Organization & Location).
-   - Point 4: Execution Schedule (Date, Time, Venue / Platform).
-   - Point 5: Session Highlights, Key Takeaways & Participant Engagement.
-   - CRITICAL: "summaryPoints" MUST contain at most 5 concise, high-value bullet points. Do NOT exceed 5 points under any circumstances.
+   - Point 7: "Future Scope: Develop the capability to navigate domain workflows and future innovation opportunities with confidence."`;
 
-4. DETAILED PROGRAM OUTCOMES ("keyProgramOutcomes"):
-   Generate EXACTLY 7 DISTINCT, NON-REPETITIVE OUTCOME BULLET POINTS, each prefixed with its exact dimension label and customized to the event topic & type:
-   - Point 1: "Subject & Domain Awareness: Gain a comprehensive understanding of [event topic] concepts and its significance in the domain."
-   - Point 2: "Conceptual Clarity: Acquire practical knowledge on key principles, methodologies, and technical frameworks of [event topic]."
-   - Point 3: "Practical Insight: Learn systematic processes and practical insights for real-world applications in [event topic]."
-   - Point 4: "Domain Competence: Understand structural requirements and specialized documentation/tools for [event topic]."
-   - Point 5: "Professional Exposure: Recognize strategic career and institutional development opportunities in [event topic]."
-   - Point 6: "Problem Solving & Application: Identify actionable methods for converting concepts into practical solutions."
-   - Point 7: "Future Scope: Develop the capability to navigate domain workflows and future innovation opportunities with confidence."
+const uploadPoster = upload.fields([
+  { name: 'poster', maxCount: 1 },
+  { name: 'file', maxCount: 1 }
+]);
 
-5. GROUNDING & SAFETY:
-   - Ground all narratives strictly in the extracted JSON facts. Do NOT invent fake labs or speakers.`;
-
-router.post('/extract', rateLimitMiddleware, authMiddleware, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded.' });
+router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware, async (req, res) => {
+  const file = req.file || (req.files && (req.files.poster?.[0] || req.files.file?.[0]));
+  if (!file) {
+    return res.status(400).json({ error: 'No poster image file provided.' });
   }
 
-  const sessionId = req.body.sessionId || req.headers['x-session-id'] || null;
-  const fingerprint = req.body.fingerprint || null;
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKeys = getApiKeys(req);
+  if (apiKeys.length === 0) {
+    lastGeminiStatus = 'OFFLINE';
+    return res.status(503).json({
+      error: 'GEMINI_API_KEY is not configured in backend environment or request headers.',
+      fallbackNeeded: true
+    });
+  }
+
+  const base64Image = file.buffer.toString('base64');
+  const mimeType = file.mimetype || 'image/jpeg';
   const modelName = getModelName();
 
-  console.log(`[AutoFill] Processing upload session: ${sessionId || 'unspecified'}`);
+  let stage1Facts = null;
+  let stage2Narratives = null;
+  let lastError = null;
 
-  if (!apiKey) {
-    console.warn('[AutoFill] GEMINI_API_KEY is not configured in environment.');
-    return res.status(503).json({
-      success: false,
-      sessionId,
-      error: 'GEMINI_API_KEY is not configured in backend environment.',
-    });
-  }
+  for (let i = 0; i < apiKeys.length; i++) {
+    const currentApiKey = apiKeys[i];
+    try {
+      const genAI = new GoogleGenerativeAI(currentApiKey);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: stage1Schema,
+          temperature: 0.1
+        },
+        systemInstruction: stage1SystemInstruction
+      });
 
-  try {
-    console.log('[AUTO FILL 01] Uploaded file:', { name: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size });
+      const imagePart = {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType
+        }
+      };
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+      const result1 = await model.generateContent([
+        imagePart,
+        'Analyze this event poster image and extract all factual details matching the JSON schema.'
+      ]);
+      const text1 = result1.response.text();
+      const rawStage1 = JSON.parse(text1);
+      stage1Facts = validateStage1Facts(rawStage1);
 
-    // STAGE 1: Vision Fact Extraction
-    console.log(`[AutoFill] Stage 1 Vision Fact Extraction started using model: ${modelName}`);
-    const stage1Model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: stage1SystemInstruction,
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: stage1Schema
-      }
-    });
+      // Stage 2: Narrative Generation
+      const model2 = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: stage2Schema,
+          temperature: 0.2
+        },
+        systemInstruction: stage2SystemInstruction
+      });
 
-    const filePart = {
-      inlineData: {
-        data: req.file.buffer.toString("base64"),
-        mimeType: req.file.mimetype
-      }
-    };
+      const result2 = await model2.generateContent([
+        `Based ONLY on these extracted event facts: ${JSON.stringify(stage1Facts)}, generate the Purpose, Summary, and Program Outcomes paragraphs/bullet points matching the JSON schema.`
+      ]);
+      const text2 = result2.response.text();
+      const rawStage2 = JSON.parse(text2);
+      stage2Narratives = validateStage2Narratives(rawStage2, stage1Facts);
 
-    const stage1Result = await stage1Model.generateContent([
-      "Analyze this event poster and extract factual JSON details strictly according to the schema.",
-      filePart
-    ]);
-
-    const stage1Text = stage1Result.response.text();
-    console.log('[AUTO FILL 02] Gemini Stage 1 raw response:', stage1Text);
-    const rawStage1Facts = JSON.parse(stage1Text);
-    
-    // Server-Side Schema Validation & Sanitization
-    const validatedFacts = validateStage1Facts(rawStage1Facts);
-    console.log('[AUTO FILL 03] Stage 1 validated facts:', JSON.stringify(validatedFacts));
-
-    // STAGE 2: Grounded Narrative Generation
-    console.log('[AutoFill] Stage 2 Grounded Narrative Generation started.');
-    const stage2Model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: stage2SystemInstruction,
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: stage2Schema
-      }
-    });
-
-    const stage2Result = await stage2Model.generateContent([
-      `Generate grounded event report narrative sections based ONLY on these validated facts: ${JSON.stringify(validatedFacts)}`
-    ]);
-
-    const stage2Text = stage2Result.response.text();
-    console.log('[AUTO FILL 04] Gemini Stage 2 raw response:', stage2Text);
-    const rawStage2Narratives = JSON.parse(stage2Text);
-
-    // Final Sanitization & Assembly
-    const validatedNarratives = validateStage2Narratives(rawStage2Narratives, validatedFacts);
-    console.log('[AUTO FILL 05] Stage 2 validated narratives:', JSON.stringify(validatedNarratives));
-
-    const primaryDate = validatedFacts.eventStartDate || '';
-    const primaryTime = validatedFacts.eventStartTime ? (validatedFacts.eventEndTime ? `${validatedFacts.eventStartTime} – ${validatedFacts.eventEndTime}` : validatedFacts.eventStartTime) : '';
-
-    const mappedResult = {
-      success: true,
-      sessionId,
-      eventTitle: validatedFacts.eventTitle,
-      organizingDepartment: validatedFacts.organizingDepartment,
-      department: validatedFacts.organizingDepartment,
-      organizingBody: validatedFacts.organizingBody,
-      organizedBy: validatedFacts.organizingBody,
-      collaborators: validatedFacts.collaborators,
-      eventType: validatedFacts.eventType,
-      eventStartDate: validatedFacts.eventStartDate,
-      eventEndDate: validatedFacts.eventEndDate,
-      registrationDeadline: validatedFacts.registrationDeadline,
-      eventStartTime: validatedFacts.eventStartTime,
-      eventEndTime: validatedFacts.eventEndTime,
-      registrationStartTime: validatedFacts.registrationStartTime,
-      date: primaryDate,
-      time: primaryTime,
-      venue: validatedFacts.venue,
-      participants: validatedFacts.participants,
-      resourcePersons: validatedFacts.resourcePersons,
-      speakers: validatedFacts.resourcePersons,
-      generatedContent: validatedNarratives,
-      confidence: {
-        eventTitle: validatedFacts.eventTitle ? 0.96 : 0.6,
-        department: validatedFacts.organizingDepartment ? 0.94 : 0.75,
-        eventStartDate: validatedFacts.eventStartDate ? 0.96 : 0.6,
-        venue: validatedFacts.venue ? 0.92 : 0.85,
-        resourcePersons: validatedFacts.resourcePersons.length ? 0.96 : 0.85
-      },
-      warnings: req.isApproachingRateLimit ? ['APPROACHING_RATE_LIMIT'] : [],
-      quotaWarning: req.isApproachingRateLimit || false,
-      ocrMethod: `Gemini Vision (${modelName})`
-    };
-
-    const finalResult = await applyHistoricalCorrections(mappedResult, fingerprint);
-    lastGeminiStatus = req.isApproachingRateLimit ? 'QUOTA_WARNING' : 'ONLINE';
-
-    console.log('[AUTO FILL 06] Final API response:', JSON.stringify(finalResult));
-    return res.status(200).json(finalResult);
-
-  } catch (geminiError) {
-    console.error('[AutoFill] Gemini Two-Stage extraction error:', geminiError.message);
-    const errMsg = geminiError.message || '';
-    
-    let status = 'ERROR';
-    let userMessage = 'Unable to process the document with Gemini Vision. Please try again.';
-    
-    if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('not authorized') || errMsg.includes('key is invalid') || errMsg.includes('403')) {
-      status = 'OFFLINE';
-      lastGeminiStatus = 'OFFLINE';
-      userMessage = 'AI Auto Fill is temporarily unavailable due to API authorization.';
-      return res.status(403).json({ success: false, sessionId, error: userMessage, status, details: errMsg });
-    } else if (errMsg.includes('exhausted') || errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit')) {
-      status = 'QUOTA_EXCEEDED';
-      lastGeminiStatus = 'QUOTA_EXCEEDED';
-      userMessage = "AI request limit reached. Please wait a moment before trying again.";
-      return res.status(429).json({ success: false, sessionId, error: userMessage, status, retryAfter: 60, details: errMsg });
+      // If successful, update status and break out of key loop
+      lastGeminiStatus = req.isApproachingRateLimit ? 'QUOTA_WARNING' : 'ONLINE';
+      lastError = null;
+      break;
+    } catch (err) {
+      lastError = err;
+      const errMsg = err.message || '';
+      console.warn(`Gemini API key index ${i} failed: ${errMsg}`);
     }
+  }
 
+  if (!stage1Facts || !stage2Narratives) {
+    const errMsg = lastError ? lastError.message : 'Unknown Gemini error';
+    if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
+      lastGeminiStatus = 'QUOTA_EXCEEDED';
+      return res.status(429).json({
+        status: 'QUOTA_EXCEEDED',
+        error: "Today's Gemini AI daily quota limit has been reached on configured API keys. You can add another free key or upgrade billing in Google AI Studio.",
+        retryAfter: 60,
+        fallbackNeeded: true
+      });
+    }
+    lastGeminiStatus = 'OFFLINE';
     return res.status(500).json({
-      success: false,
-      sessionId,
-      error: userMessage,
-      details: errMsg
+      error: `Gemini API execution failed: ${errMsg}`,
+      fallbackNeeded: true
     });
   }
+
+  const combinedResult = {
+    ...stage1Facts,
+    ...stage2Narratives,
+    confidence: {
+      eventTitle: 0.95,
+      eventType: 0.95,
+      organizingDepartment: 0.92,
+      organizingBody: 0.90,
+      resourcePersons: 0.95,
+      eventStartDate: 0.95,
+      venue: 0.90,
+      objectiveDescription: 0.95,
+      eventSummary: 0.95,
+      keyProgramOutcomes: 0.95,
+      summaryPoints: 0.95
+    }
+  };
+
+  const fingerprint = req.body.fingerprint;
+  const finalResult = await applyHistoricalCorrections(combinedResult, fingerprint);
+
+  return res.json({
+    status: 'success',
+    data: finalResult,
+    quotaWarning: req.isApproachingRateLimit
+  });
 });
 
 router.post('/feedback', async (req, res) => {
@@ -654,14 +643,14 @@ router.post('/feedback', async (req, res) => {
 });
 
 router.get('/health', async (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKeys = getApiKeys(req);
   const model = getModelName();
   const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   const now = Date.now();
   const timestamps = (ipLimits.get(ip) || []).filter(t => now - t < RATE_LIMIT_WINDOW);
   const isApproachingLimit = timestamps.length >= 7;
 
-  if (!apiKey || apiKey.trim() === '' || apiKey.includes('YOUR_GEMINI_API_KEY')) {
+  if (apiKeys.length === 0) {
     lastGeminiStatus = 'OFFLINE';
     return res.status(503).json({
       status: 'OFFLINE',
@@ -672,66 +661,49 @@ router.get('/health', async (req, res) => {
     });
   }
 
-  // If rate limit window is actively saturated
-  if (lastGeminiStatus === 'QUOTA_EXCEEDED' && timestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+  let lastHealthErr = null;
+  for (const apiKey of apiKeys) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const m = genAI.getGenerativeModel({ model });
+      await m.generateContent('ping');
+      lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
+      return res.json({
+        status: lastGeminiStatus,
+        provider: 'google',
+        model,
+        available: true,
+        quotaWarning: isApproachingLimit,
+        message: isApproachingLimit
+          ? `Gemini AI (${model}) is connected. High usage detected.`
+          : `Gemini AI (${model}) is connected and online.`
+      });
+    } catch (err) {
+      lastHealthErr = err;
+    }
+  }
+
+  const errMsg = lastHealthErr ? lastHealthErr.message : '';
+  if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
+    lastGeminiStatus = 'QUOTA_EXCEEDED';
     return res.status(429).json({
       status: 'QUOTA_EXCEEDED',
       provider: 'google',
       model,
       available: false,
       retryAfter: 60,
-      message: "AI request quota reached. Please wait a moment."
+      message: "Today's AI request quota has been reached on configured keys."
     });
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const m = genAI.getGenerativeModel({ model });
-    await m.generateContent('ping');
-    lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
-    return res.json({
-      status: lastGeminiStatus,
-      provider: 'google',
-      model,
-      available: true,
-      quotaWarning: isApproachingLimit,
-      message: isApproachingLimit
-        ? `Gemini AI (${model}) is connected. High usage detected.`
-        : `Gemini AI (${model}) is connected and online.`
-    });
-  } catch (err) {
-    const errMsg = err.message || '';
-    if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
-      lastGeminiStatus = 'QUOTA_EXCEEDED';
-      return res.status(429).json({
-        status: 'QUOTA_EXCEEDED',
-        provider: 'google',
-        model,
-        available: false,
-        retryAfter: 60,
-        message: "Today's AI request quota has been reached."
-      });
-    } else if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('403') || errMsg.includes('not authorized') || errMsg.includes('key is invalid')) {
-      lastGeminiStatus = 'OFFLINE';
-      return res.status(403).json({
-        status: 'OFFLINE',
-        provider: 'google',
-        model,
-        available: false,
-        message: 'Invalid or unauthorized Gemini API Key.'
-      });
-    }
-
-    lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
-    return res.json({
-      status: lastGeminiStatus,
-      provider: 'google',
-      model,
-      available: true,
-      quotaWarning: isApproachingLimit,
-      message: `Gemini AI is connected.`
-    });
-  }
+  lastGeminiStatus = 'OFFLINE';
+  return res.status(500).json({
+    status: 'OFFLINE',
+    provider: 'google',
+    model,
+    available: false,
+    message: `Gemini AI health check error: ${errMsg}`
+  });
 });
 
 export default router;

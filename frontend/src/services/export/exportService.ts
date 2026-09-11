@@ -54,38 +54,39 @@ export const exportService = {
         }));
 
         const canvas = await html2canvas(pageEl, {
-          scale: 2.5,
+          scale: 3,
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff',
           onclone: (clonedDoc, clonedElement) => {
-            // In the cloned render iframe, reset all transforms for natural 1:1 sizing
+            // Reset all transforms for natural 1:1 sizing
             if (clonedElement) {
               clonedElement.style.transform = 'none';
               clonedElement.style.margin = '0';
               clonedElement.style.boxShadow = 'none';
             }
 
-            clonedDoc.querySelectorAll<HTMLElement>('.a4-page-wrapper').forEach(wrapper => {
-              wrapper.style.transform = 'none';
-              wrapper.style.margin = '0';
-              wrapper.style.padding = '0';
+            clonedDoc.querySelectorAll<HTMLElement>('.a4-page-wrapper, .a4-zoom-container, .a4-page').forEach(el => {
+              el.style.transform = 'none';
+              el.style.margin = '0';
+              el.style.padding = '0';
+              el.style.boxShadow = 'none';
             });
 
-            clonedDoc.querySelectorAll<HTMLElement>('.a4-page').forEach(p => {
-              p.style.transform = 'none';
-              p.style.margin = '0';
-              p.style.boxShadow = 'none';
+            // Reset letter and word spacing to prevent html2canvas text rendering bugs while preserving original text alignment
+            clonedDoc.querySelectorAll<HTMLElement>('p, span, div, td, th, h1, h2, h3, h4, h5, h6, li, figcaption').forEach(el => {
+              el.style.letterSpacing = 'normal';
+              el.style.wordSpacing = 'normal';
             });
 
-            // Hide UI controls, buttons, and page badges from export
+            // Hide interactive workspace UI controls and badges from exported PDF
             clonedDoc.querySelectorAll('.no-print, .page-number-badge, button, input').forEach(el => {
               (el as HTMLElement).style.display = 'none';
             });
           }
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         if (i > 0) {
           pdf.addPage('a4', isLandscape ? 'landscape' : 'portrait');
         }
