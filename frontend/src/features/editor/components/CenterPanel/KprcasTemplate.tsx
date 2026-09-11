@@ -99,10 +99,10 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
 
     const cellStyle: React.CSSProperties = {
       border: `${tableBorderWidthPx}px solid ${tableBorderColor}`,
-      padding: `${Math.max(3, tablePaddingPx - 2)}px ${Math.max(4, tablePaddingPx)}px`,
-      minHeight: '24px',
+      padding: '3px 6px',
+      minHeight: '22px',
       verticalAlign: 'middle',
-      lineHeight: 1.3
+      lineHeight: 1.25
     };
 
     const headerInstitutionName = (safeData.header?.institutionName && safeData.header.institutionName.trim()) 
@@ -346,8 +346,11 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
     { id: 'images', title: 'Geo-Tagged Photographs:' },
   ];
 
+  const NON_BODY_SECTIONS = new Set(['header', 'resource_persons', 'participants']);
+
   // Process sections preserving user-customized order while ensuring canonical sections remain visible
   const sectionsToRender = CANONICAL_SECTIONS.filter(sec => {
+    if (NON_BODY_SECTIONS.has(sec.id)) return false;
     const found = sortedSections.find(s => s.id === sec.id);
     return found ? found.visible !== false : true;
   });
