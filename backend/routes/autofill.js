@@ -57,8 +57,8 @@ const authMiddleware = (req, res, next) => {
 
 const getModelName = () => {
   const model = process.env.GEMINI_MODEL;
-  if (!model || model.trim() === '' || model.includes('3.6')) {
-    return 'gemini-1.5-flash';
+  if (!model || model.trim() === '' || model.includes('3.6') || model.includes('1.5')) {
+    return 'gemini-flash-latest';
   }
   return model.trim();
 };
