@@ -398,21 +398,52 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
         break;
 
       case 'summary': {
-        const summaryText = data.eventSummary
-          ? data.eventSummary
-          : (data.summaryPoints && data.summaryPoints.length > 0 ? data.summaryPoints.join(' ') : 'The event commenced with an inaugural session highlighting domain concepts followed by practical interactive demonstrations.');
+        if (data.eventSummary) {
+          const paragraphs = data.eventSummary.split(/\n\n+/).filter(Boolean);
+          paragraphs.forEach((para, pIdx) => {
+            rawBlocks.push({
+              id: `summary-para-${pIdx}`,
+              type: 'paragraph',
+              sectionId: sec.id,
+              text: para,
+              render: (text: string) => (
+                <p className="text-justify leading-normal text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>
+                  {text}
+                </p>
+              )
+            });
+          });
+        }
+        
+        if (data.summaryPoints && data.summaryPoints.length > 0) {
+          data.summaryPoints.forEach((pt, idx) => {
+            rawBlocks.push({
+              id: `summary-pt-${idx}`,
+              type: 'bullet',
+              sectionId: sec.id,
+              text: pt,
+              render: (text: string) => (
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li className="text-justify text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>{text}</li>
+                </ul>
+              )
+            });
+          });
+        }
 
-        rawBlocks.push({
-          id: 'summary-text-block',
-          type: 'paragraph',
-          sectionId: sec.id,
-          text: summaryText,
-          render: (text: string) => (
-            <p className="text-justify leading-normal text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>
-              {text}
-            </p>
-          )
-        });
+        if (!data.eventSummary && (!data.summaryPoints || data.summaryPoints.length === 0)) {
+          rawBlocks.push({
+            id: 'summary-text-block',
+            type: 'paragraph',
+            sectionId: sec.id,
+            text: 'The event commenced with an inaugural session highlighting domain concepts followed by practical interactive demonstrations.',
+            render: (text: string) => (
+              <p className="text-justify leading-normal text-slate-800" style={{ fontSize: `${fontSizeBase}pt`, marginBottom: `${styling.paragraphSpacing}px` }}>
+                {text}
+              </p>
+            )
+          });
+        }
         break;
       }
 
@@ -663,7 +694,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
         }
 
         // If heading + next content exceeds usable height AND page has content, move heading to new page
-        if (currentPageHeight + nodeHeight + Math.min(nextNodeHeight, 40) > usableHeight && currentPageHeight > 0) {
+        if (currentPageHeight + nodeHeight + Math.min(nextNodeHeight, 75) > usableHeight && currentPageHeight > 0) {
           startNewPage();
         }
       }

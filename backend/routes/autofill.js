@@ -57,24 +57,25 @@ const authMiddleware = (req, res, next) => {
 
 const getModelName = () => {
   const model = process.env.GEMINI_MODEL;
-  if (!model || model.trim() === '' || model.includes('3.6') || model.includes('1.5')) {
-    return 'gemini-flash-latest';
+  if (model && model.trim() !== '') {
+    return model.trim();
   }
-  return model.trim();
+  return 'gemini-3.6-flash';
 };
 
 function getApiKeys(req) {
   const keys = [];
+  const cleanKey = k => k ? k.trim().replace(/^['"]|['"]$/g, '') : '';
   const headerKey = req && req.headers ? req.headers['x-gemini-api-key'] : null;
   if (headerKey && headerKey.trim()) {
-    keys.push(...headerKey.split(',').map(k => k.trim()).filter(Boolean));
+    keys.push(...headerKey.split(',').map(cleanKey).filter(Boolean));
   }
   if (process.env.GEMINI_API_KEYS) {
-    const list = process.env.GEMINI_API_KEYS.split(',').map(k => k.trim()).filter(Boolean);
+    const list = process.env.GEMINI_API_KEYS.split(',').map(cleanKey).filter(Boolean);
     keys.push(...list);
   }
   if (process.env.GEMINI_API_KEY) {
-    const list = process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean);
+    const list = process.env.GEMINI_API_KEY.split(',').map(cleanKey).filter(Boolean);
     list.forEach(k => {
       if (k && !keys.includes(k)) {
         keys.push(k);

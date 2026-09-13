@@ -3,7 +3,8 @@
 /* Scrollable container simulating the workbench backing */
 .preview-canvas-container {
   overflow-y: auto;
-  height: calc(100vh - 112px); /* Subtract top header (56px) and preview toolbar (48px) */
+  height: 100%;
+  width: 100%;
   background-color: var(--surface-secondary);
   padding: 2rem 1rem;
   display: flex;
