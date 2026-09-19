@@ -86,17 +86,26 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
   const [quotaCountdown, setQuotaCountdown] = useState<number | null>(null);
   const [extractionMethod, setExtractionMethod] = useState<string>('');
 
-  const checkHealth = async () => {
+  const checkHealth = async (retryCount = 0, maxRetries = 5) => {
     setVisionStatus('loading');
-    setConnectingMessage('Connecting to Gemini AI...');
+    if (retryCount > 0) {
+      setConnectingMessage(`Waking up Gemini AI (Server starting... Attempt ${retryCount}/${maxRetries})`);
+    } else {
+      setConnectingMessage('Connecting to Gemini AI...');
+    }
 
     const coldStartTimer = setTimeout(() => {
-      setConnectingMessage('Waking up AI backend (Cold Start)...');
+      setConnectingMessage(`Waking up AI backend (Cold Start attempt ${retryCount + 1}/${maxRetries})...`);
     }, 2500);
 
     try {
-      const res = await fetch(`${API_URL}/api/autofill/health`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const res = await fetch(`${API_URL}/api/autofill/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       clearTimeout(coldStartTimer);
+
       const data = await res.json().catch(() => ({}));
       
       if (res.status === 429 || data.status === 'QUOTA_EXCEEDED') {
@@ -105,17 +114,30 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
       } else if (data && data.status === 'QUOTA_WARNING') {
         setVisionStatus('QUOTA_WARNING');
       } else if (data && data.status === 'OFFLINE') {
-        setVisionStatus('OFFLINE');
+        if (retryCount < maxRetries) {
+          setTimeout(() => checkHealth(retryCount + 1, maxRetries), 3500);
+        } else {
+          setVisionStatus('OFFLINE');
+        }
       } else if (!res.ok) {
-        setVisionStatus('OFFLINE');
+        if (retryCount < maxRetries) {
+          setTimeout(() => checkHealth(retryCount + 1, maxRetries), 3500);
+        } else {
+          setVisionStatus('OFFLINE');
+        }
       } else {
         setVisionStatus('ONLINE');
         setQuotaCountdown(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       clearTimeout(coldStartTimer);
-      console.error('Health check failed:', error);
-      setVisionStatus('OFFLINE');
+      console.warn(`Health check attempt ${retryCount + 1} failed:`, error.message || error);
+      if (retryCount < maxRetries) {
+        setConnectingMessage(`Server waking up... retrying (${retryCount + 1}/${maxRetries})`);
+        setTimeout(() => checkHealth(retryCount + 1, maxRetries), 3500);
+      } else {
+        setVisionStatus('OFFLINE');
+      }
     }
   };
 

@@ -219,11 +219,41 @@ export async function executePosterAutofill(
     formData.append('file', processedBlob, file.name.replace(/\.pdf$/i, '.png'));
     formData.append('sessionId', sessionId);
 
-    const response = await fetch(`${API_URL}/api/autofill/extract`, {
-      method: 'POST',
-      body: formData,
-      signal
-    });
+    let response: Response | null = null;
+    let lastFetchErr: any = null;
+    const maxRetries = 3;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 1) {
+          onProgress(3, `Server starting... Retrying extraction (${attempt}/${maxRetries})...`);
+          await new Promise(r => setTimeout(r, 3000));
+        }
+
+        if (isCancelled()) {
+          throw new Error('STALE_SESSION');
+        }
+
+        response = await fetch(`${API_URL}/api/autofill/extract`, {
+          method: 'POST',
+          body: formData,
+          signal
+        });
+
+        if (response.ok || response.status === 429) {
+          break;
+        }
+      } catch (err: any) {
+        lastFetchErr = err;
+        if (err.message === 'STALE_SESSION' || err.name === 'AbortError') {
+          throw err;
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastFetchErr || new Error('OFFLINE');
+    }
 
     if (isCancelled()) {
       throw new Error('STALE_SESSION');
