@@ -505,67 +505,80 @@ router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware
 
   const base64Image = file.buffer.toString('base64');
   const mimeType = file.mimetype || 'image/jpeg';
-  const modelName = getModelName();
+  const configuredModel = getModelName();
+  const modelCandidates = Array.from(new Set([configuredModel, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-flash-latest'])).filter(Boolean);
 
   let stage1Facts = null;
   let stage2Narratives = null;
   let lastError = null;
 
-  for (let i = 0; i < apiKeys.length; i++) {
+  keyLoop: for (let i = 0; i < apiKeys.length; i++) {
     const currentApiKey = apiKeys[i];
-    try {
-      const genAI = new GoogleGenerativeAI(currentApiKey);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: stage1Schema,
-          temperature: 0.1
-        },
-        systemInstruction: stage1SystemInstruction
-      });
+    const genAI = new GoogleGenerativeAI(currentApiKey);
 
-      const imagePart = {
-        inlineData: {
-          data: base64Image,
-          mimeType: mimeType
+    for (const targetModel of modelCandidates) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          if (attempt > 1) {
+            await new Promise(r => setTimeout(r, 1500));
+          }
+
+          const model = genAI.getGenerativeModel({
+            model: targetModel,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: stage1Schema,
+              temperature: 0.1
+            },
+            systemInstruction: stage1SystemInstruction
+          });
+
+          const imagePart = {
+            inlineData: {
+              data: base64Image,
+              mimeType: mimeType
+            }
+          };
+
+          const result1 = await model.generateContent([
+            imagePart,
+            'Analyze this event poster image and extract all factual details matching the JSON schema.'
+          ]);
+          const text1 = result1.response.text();
+          const rawStage1 = JSON.parse(text1);
+          stage1Facts = validateStage1Facts(rawStage1);
+
+          // Stage 2: Narrative Generation
+          const model2 = genAI.getGenerativeModel({
+            model: targetModel,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: stage2Schema,
+              temperature: 0.2
+            },
+            systemInstruction: stage2SystemInstruction
+          });
+
+          const result2 = await model2.generateContent([
+            `Based ONLY on these extracted event facts: ${JSON.stringify(stage1Facts)}, generate the Purpose, Summary, and Program Outcomes paragraphs/bullet points matching the JSON schema.`
+          ]);
+          const text2 = result2.response.text();
+          const rawStage2 = JSON.parse(text2);
+          stage2Narratives = validateStage2Narratives(rawStage2, stage1Facts);
+
+          // If successful, update status and break out of loops
+          lastGeminiStatus = req.isApproachingRateLimit ? 'QUOTA_WARNING' : 'ONLINE';
+          lastError = null;
+          break keyLoop;
+        } catch (err) {
+          lastError = err;
+          const errMsg = err.message || '';
+          console.warn(`Gemini API key index ${i}, model ${targetModel} (attempt ${attempt}) failed: ${errMsg}`);
+          if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
+            break; // Skip remaining model attempts for this key if quota exhausted
+          }
         }
-      };
-
-      const result1 = await model.generateContent([
-        imagePart,
-        'Analyze this event poster image and extract all factual details matching the JSON schema.'
-      ]);
-      const text1 = result1.response.text();
-      const rawStage1 = JSON.parse(text1);
-      stage1Facts = validateStage1Facts(rawStage1);
-
-      // Stage 2: Narrative Generation
-      const model2 = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: stage2Schema,
-          temperature: 0.2
-        },
-        systemInstruction: stage2SystemInstruction
-      });
-
-      const result2 = await model2.generateContent([
-        `Based ONLY on these extracted event facts: ${JSON.stringify(stage1Facts)}, generate the Purpose, Summary, and Program Outcomes paragraphs/bullet points matching the JSON schema.`
-      ]);
-      const text2 = result2.response.text();
-      const rawStage2 = JSON.parse(text2);
-      stage2Narratives = validateStage2Narratives(rawStage2, stage1Facts);
-
-      // If successful, update status and break out of key loop
-      lastGeminiStatus = req.isApproachingRateLimit ? 'QUOTA_WARNING' : 'ONLINE';
-      lastError = null;
-      break;
-    } catch (err) {
-      lastError = err;
-      const errMsg = err.message || '';
-      console.warn(`Gemini API key index ${i} failed: ${errMsg}`);
+      }
     }
   }
 
