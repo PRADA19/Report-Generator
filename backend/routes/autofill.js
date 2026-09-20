@@ -60,7 +60,7 @@ const getModelName = () => {
   if (model && model.trim() !== '') {
     return model.trim();
   }
-  return 'gemini-3.6-flash';
+  return 'gemini-1.5-flash';
 };
 
 function getApiKeys(req) {
@@ -506,7 +506,7 @@ router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware
   const base64Image = file.buffer.toString('base64');
   const mimeType = file.mimetype || 'image/jpeg';
   const configuredModel = getModelName();
-  const modelCandidates = Array.from(new Set([configuredModel, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-flash-latest'])).filter(Boolean);
+  const modelCandidates = Array.from(new Set([configuredModel, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest'])).filter(Boolean);
 
   let stage1Facts = null;
   let stage2Narratives = null;
