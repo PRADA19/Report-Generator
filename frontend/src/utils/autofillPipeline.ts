@@ -15,8 +15,9 @@ if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
 }
 
 const getApiUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '' && !envUrl.includes('vercel.app')) {
+    return envUrl.replace(/\/+$/, '');
   }
   return 'https://report-generator-lok5.onrender.com';
 };

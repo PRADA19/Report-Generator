@@ -15,8 +15,9 @@ import { executePosterAutofill, formatToInputDate, type ExtractedPosterFields } 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 const getApiUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '' && !envUrl.includes('vercel.app')) {
+    return envUrl.replace(/\/+$/, '');
   }
   return 'https://report-generator-lok5.onrender.com';
 };
