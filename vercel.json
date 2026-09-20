@@ -4,8 +4,8 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://report-generator-lok5.onrender.com/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://report-generator-lok5.onrender.com/api/$1"
     },
     {
       "source": "/(.*)",
