@@ -240,8 +240,15 @@ export async function executePosterAutofill(
           throw new Error('STALE_SESSION');
         }
 
+        const userApiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null) || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+        const headers: Record<string, string> = {};
+        if (userApiKey && userApiKey.trim()) {
+          headers['x-gemini-api-key'] = userApiKey.trim();
+        }
+
         response = await fetch(`${API_URL}/api/autofill/extract`, {
           method: 'POST',
+          headers,
           body: formData,
           signal
         });
@@ -285,20 +292,22 @@ export async function executePosterAutofill(
       throw new Error('Autofill session cancelled.');
     }
 
-    apiGeneratedContent = resData.generatedContent || null;
+    const payload = resData.data || resData;
+
+    apiGeneratedContent = payload;
     ocrMethod = resData.ocrMethod || 'Gemini Vision';
 
     extractedData = {
-      title: resData.eventTitle || '',
+      title: payload.eventTitle || payload.title || '',
       batch: '',
-      date: resData.eventStartDate || resData.date || '',
-      time: resData.time || resData.eventStartTime || '',
-      eventType: resData.eventType || '',
+      date: payload.eventStartDate || payload.date || '',
+      time: payload.eventStartTime || payload.time || '',
+      eventType: payload.eventType || '',
       dressCode: '',
       specialNote: '',
-      venue: resData.venue || '',
-      department: resData.organizingDepartment || resData.department || '',
-      speaker: (resData.resourcePersons || resData.speakers)?.map((s: any) => {
+      venue: payload.venue || '',
+      department: payload.organizingDepartment || payload.department || '',
+      speaker: (payload.resourcePersons || payload.speakers)?.map((s: any) => {
         const name = s.name ? String(s.name).trim() : '';
         if (!name) return '';
         const designation = s.designation ? String(s.designation).trim() : '';
@@ -307,29 +316,29 @@ export async function executePosterAutofill(
         }
         return name;
       }).filter(Boolean).join(', ') || '',
-      coordinator: resData.organizingBody || resData.organizedBy || '',
+      coordinator: payload.organizingBody || payload.organizedBy || '',
       facultyInCharge: '',
-      theme: (resData.resourcePersons || resData.speakers)?.[0]?.designation || '',
-      description: resData.briefDescription || '',
-      eventStartDate: resData.eventStartDate || resData.date || '',
-      eventEndDate: resData.eventEndDate || '',
-      registrationDeadline: resData.registrationDeadline || '',
-      eventStartTime: resData.eventStartTime || '',
-      eventEndTime: resData.eventEndTime || '',
-      registrationStartTime: resData.registrationStartTime || '',
-      collaborators: Array.isArray(resData.collaborators) ? resData.collaborators : [],
-      resourcePersons: Array.isArray(resData.resourcePersons || resData.speakers) ? (resData.resourcePersons || resData.speakers) : []
+      theme: (payload.resourcePersons || payload.speakers)?.[0]?.designation || '',
+      description: payload.objectiveDescription || payload.eventSummary || payload.briefDescription || '',
+      eventStartDate: payload.eventStartDate || payload.date || '',
+      eventEndDate: payload.eventEndDate || '',
+      registrationDeadline: payload.registrationDeadline || '',
+      eventStartTime: payload.eventStartTime || payload.time || '',
+      eventEndTime: payload.eventEndTime || '',
+      registrationStartTime: payload.registrationStartTime || '',
+      collaborators: Array.isArray(payload.collaborators) ? payload.collaborators : [],
+      resourcePersons: Array.isArray(payload.resourcePersons || payload.speakers) ? (payload.resourcePersons || payload.speakers) : []
     };
 
     confMapping = {
-      title: extractedData.title ? Math.round((resData.confidence?.eventTitle ?? 0.96) * 100) : 50,
+      title: extractedData.title ? Math.round((payload.confidence?.eventTitle ?? 0.96) * 100) : 50,
       batch: 90,
-      date: extractedData.date ? Math.round((resData.confidence?.eventStartDate ?? resData.confidence?.date ?? 0.96) * 100) : 50,
+      date: extractedData.date ? Math.round((payload.confidence?.eventStartDate ?? payload.confidence?.date ?? 0.96) * 100) : 50,
       time: extractedData.time ? 92 : 80,
       eventType: extractedData.eventType ? 95 : 80,
-      venue: extractedData.venue ? Math.round((resData.confidence?.venue ?? 0.92) * 100) : 85,
-      department: extractedData.department ? Math.round((resData.confidence?.department ?? 0.94) * 100) : 85,
-      speaker: extractedData.speaker ? Math.round((resData.confidence?.resourcePersons ?? resData.confidence?.speakers ?? 0.96) * 100) : 85,
+      venue: extractedData.venue ? Math.round((payload.confidence?.venue ?? 0.92) * 100) : 85,
+      department: extractedData.department ? Math.round((payload.confidence?.organizingDepartment ?? payload.confidence?.department ?? 0.94) * 100) : 85,
+      speaker: extractedData.speaker ? Math.round((payload.confidence?.resourcePersons ?? payload.confidence?.speakers ?? 0.96) * 100) : 85,
       coordinator: extractedData.coordinator ? 92 : 85,
       theme: extractedData.theme ? 92 : 85,
     };
@@ -407,7 +416,7 @@ export async function executePosterAutofill(
 
   // 5. Structure Generated Report Content
   let generatedReport: any;
-  if (apiGeneratedContent && Object.keys(apiGeneratedContent).length > 0) {
+  if (apiGeneratedContent && (apiGeneratedContent.objectiveDescription || apiGeneratedContent.eventSummary || (apiGeneratedContent.keyProgramOutcomes && apiGeneratedContent.keyProgramOutcomes.length > 0))) {
     generatedReport = {
       title: extractedData.title,
       objective: apiGeneratedContent.objectiveDescription || '',
@@ -417,9 +426,9 @@ export async function executePosterAutofill(
       detailedHighlights: apiGeneratedContent.summaryPoints || [],
       outcomes: apiGeneratedContent.keyProgramOutcomes || [],
       attendancePercentage: '',
-      conclusion: '',
-      detailedConclusion: '',
-      participationDetails: ''
+      conclusion: apiGeneratedContent.conclusion || '',
+      detailedConclusion: apiGeneratedContent.conclusion || '',
+      participationDetails: apiGeneratedContent.participationDetails || ''
     };
   } else {
     const parsedForReport: ParsedPosterData = {

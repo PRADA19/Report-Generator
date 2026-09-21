@@ -359,36 +359,36 @@ async function applyHistoricalCorrections(rawResult, fingerprint) {
 }
 
 const stage1Schema = {
-  type: "object",
+  type: "OBJECT",
   properties: {
-    eventTitle: { type: "string" },
-    eventType: { type: "string" },
-    organizingBody: { type: "string" },
-    organizingDepartment: { type: "string" },
+    eventTitle: { type: "STRING" },
+    eventType: { type: "STRING" },
+    organizingBody: { type: "STRING" },
+    organizingDepartment: { type: "STRING" },
     collaborators: {
-      type: "array",
-      items: { type: "string" }
+      type: "ARRAY",
+      items: { type: "STRING" }
     },
-    eventStartDate: { type: "string" },
-    eventEndDate: { type: "string" },
-    registrationDeadline: { type: "string" },
-    eventStartTime: { type: "string" },
-    eventEndTime: { type: "string" },
-    registrationStartTime: { type: "string" },
-    venue: { type: "string" },
+    eventStartDate: { type: "STRING" },
+    eventEndDate: { type: "STRING" },
+    registrationDeadline: { type: "STRING" },
+    eventStartTime: { type: "STRING" },
+    eventEndTime: { type: "STRING" },
+    registrationStartTime: { type: "STRING" },
+    venue: { type: "STRING" },
     resourcePersons: {
-      type: "array",
+      type: "ARRAY",
       items: {
-        type: "object",
+        type: "OBJECT",
         properties: {
-          name: { type: "string" },
-          qualification: { type: "string" },
-          designation: { type: "string" },
-          organization: { type: "string" }
+          name: { type: "STRING" },
+          qualification: { type: "STRING" },
+          designation: { type: "STRING" },
+          organization: { type: "STRING" }
         }
       }
     },
-    participants: { type: "number" }
+    participants: { type: "NUMBER" }
   },
   required: ["eventTitle", "eventType", "resourcePersons", "collaborators"]
 };
@@ -433,20 +433,20 @@ COMPREHENSIVE MULTI-ZONE POSTER ANALYSIS DIRECTIVES:
    - If a detail is missing from the poster, return null (or [] for arrays). Never fabricate data or infer non-existent facts.`;
 
 const stage2Schema = {
-  type: "object",
+  type: "OBJECT",
   properties: {
-    objectiveDescription: { type: "string" },
-    eventSummary: { type: "string" },
-    participationDetails: { type: "string" },
+    objectiveDescription: { type: "STRING" },
+    eventSummary: { type: "STRING" },
+    participationDetails: { type: "STRING" },
     keyProgramOutcomes: {
-      type: "array",
-      items: { type: "string" }
+      type: "ARRAY",
+      items: { type: "STRING" }
     },
     summaryPoints: {
-      type: "array",
-      items: { type: "string" }
+      type: "ARRAY",
+      items: { type: "STRING" }
     },
-    conclusion: { type: "string" }
+    conclusion: { type: "STRING" }
   },
   required: ["objectiveDescription", "eventSummary", "keyProgramOutcomes", "summaryPoints"]
 };

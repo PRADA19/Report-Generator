@@ -108,7 +108,13 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-      const res = await fetch(`${API_URL}/api/autofill/health`, { signal: controller.signal });
+      const userApiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null) || '';
+      const headers: Record<string, string> = {};
+      if (userApiKey && userApiKey.trim()) {
+        headers['x-gemini-api-key'] = userApiKey.trim();
+      }
+
+      const res = await fetch(`${API_URL}/api/autofill/health`, { headers, signal: controller.signal });
       clearTimeout(timeoutId);
       clearTimeout(coldStartTimer);
 
