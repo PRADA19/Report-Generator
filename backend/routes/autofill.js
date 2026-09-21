@@ -60,7 +60,7 @@ const getModelName = () => {
   if (model && model.trim() !== '') {
     return model.trim();
   }
-  return 'gemini-1.5-flash';
+  return 'gemini-3.6-flash';
 };
 
 function getApiKeys(req) {
@@ -506,7 +506,7 @@ router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware
   const base64Image = file.buffer.toString('base64');
   const mimeType = file.mimetype || 'image/jpeg';
   const configuredModel = getModelName();
-  const modelCandidates = Array.from(new Set([configuredModel, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest'])).filter(Boolean);
+  const modelCandidates = Array.from(new Set([configuredModel, 'gemini-3.6-flash', 'gemini-flash-latest'])).filter(Boolean);
 
   let stage1Facts = null;
   let stage2Narratives = null;
@@ -574,6 +574,9 @@ router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware
           lastError = err;
           const errMsg = err.message || '';
           console.warn(`Gemini API key index ${i}, model ${targetModel} (attempt ${attempt}) failed: ${errMsg}`);
+          if (errMsg.includes('404') || errMsg.includes('not found') || errMsg.includes('no longer available')) {
+            break; // Skip attempt 2 for non-existent/deprecated model
+          }
           if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
             break; // Skip remaining model attempts for this key if quota exhausted
           }
