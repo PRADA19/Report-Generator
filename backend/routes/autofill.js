@@ -483,16 +483,23 @@ EVENT-SPECIFIC & DYNAMIC REPORT GENERATION DIRECTIVES:
    - Point 2: Event Title, Core Subject Theme & Technical Scope.
    - Point 7: "Future Scope: Develop the capability to navigate domain workflows and future innovation opportunities with confidence."`;
 
-const uploadPoster = upload.fields([
-  { name: 'poster', maxCount: 1 },
-  { name: 'file', maxCount: 1 }
-]);
+const uploadAny = upload.any();
 
-router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware, async (req, res) => {
-  const file = req.file || (req.files && (req.files.poster?.[0] || req.files.file?.[0]));
-  if (!file) {
-    return res.status(400).json({ error: 'No poster image file provided.' });
-  }
+const handleUpload = (req, res, next) => {
+  uploadAny(req, res, (err) => {
+    if (err) {
+      console.warn('Multer upload parsing warning:', err.message);
+    }
+    next();
+  });
+};
+
+router.post(['/', '/extract'], handleUpload, rateLimitMiddleware, authMiddleware, async (req, res) => {
+  try {
+    const file = req.file || (Array.isArray(req.files) && req.files.length > 0 ? req.files[0] : (req.files && (req.files.poster?.[0] || req.files.file?.[0])));
+    if (!file) {
+      return res.status(400).json({ error: 'No poster image file provided.' });
+    }
 
   const apiKeys = getApiKeys(req);
   if (apiKeys.length === 0) {
@@ -621,7 +628,7 @@ router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware
     }
   };
 
-  const fingerprint = req.body.fingerprint;
+  const fingerprint = req.body ? req.body.fingerprint : null;
   const finalResult = await applyHistoricalCorrections(combinedResult, fingerprint);
 
   return res.json({
@@ -629,6 +636,14 @@ router.post(['/', '/extract'], uploadPoster, rateLimitMiddleware, authMiddleware
     data: finalResult,
     quotaWarning: req.isApproachingRateLimit
   });
+  } catch (globalErr) {
+    console.error('Unhandled autofill extraction error:', globalErr);
+    lastGeminiStatus = 'OFFLINE';
+    return res.status(500).json({
+      error: `Autofill processing error: ${globalErr.message || globalErr}`,
+      fallbackNeeded: true
+    });
+  }
 });
 
 router.post('/feedback', async (req, res) => {
