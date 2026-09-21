@@ -87,28 +87,33 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
     theme: 100,
   });
 
+  const [customApiKey, setCustomApiKey] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : '') || '';
+  });
+  const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
+
   const [visionStatus, setVisionStatus] = useState<'ONLINE' | 'PROCESSING' | 'QUOTA_WARNING' | 'QUOTA_EXCEEDED' | 'OFFLINE' | 'ERROR' | 'loading'>('loading');
   const [connectingMessage, setConnectingMessage] = useState<string>('Connecting to Gemini AI...');
   const [quotaCountdown, setQuotaCountdown] = useState<number | null>(null);
   const [extractionMethod, setExtractionMethod] = useState<string>('');
 
-  const checkHealth = async (retryCount = 0, maxRetries = 5) => {
+  const checkHealth = async (retryCount = 0, maxRetries = 6) => {
     setVisionStatus('loading');
     if (retryCount > 0) {
-      setConnectingMessage(`Waking up Gemini AI (Server starting... Attempt ${retryCount}/${maxRetries})`);
+      setConnectingMessage(`Waking up Gemini AI backend (Attempt ${retryCount}/${maxRetries})...`);
     } else {
       setConnectingMessage('Connecting to Gemini AI...');
     }
 
     const coldStartTimer = setTimeout(() => {
-      setConnectingMessage(`Waking up AI backend (Cold Start attempt ${retryCount + 1}/${maxRetries})...`);
+      setConnectingMessage(`Server waking up from sleep mode (Attempt ${retryCount + 1}/${maxRetries})...`);
     }, 2500);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-      const userApiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null) || '';
+      const userApiKey = customApiKey.trim() || (typeof localStorage !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : null) || '';
       const headers: Record<string, string> = {};
       if (userApiKey && userApiKey.trim()) {
         headers['x-gemini-api-key'] = userApiKey.trim();
@@ -731,14 +736,64 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
             {/* Offline Status Alert Card */}
             {visionStatus === 'OFFLINE' && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
-                <div>
-                  <div className="font-bold text-[11px]">Gemini AI is Offline</div>
-                  <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
-                    Cannot reach AI backend. Please verify backend URL and <code className="font-mono text-[9px] bg-surface-secondary px-1 py-0.5 rounded">GEMINI_API_KEY</code>.
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs flex flex-col space-y-2">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+                  <div>
+                    <div className="font-bold text-[11px]">Gemini AI Backend Offline / Sleeping</div>
+                    <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
+                      Backend on Render may be sleeping. Click below to reconnect or enter a custom Gemini API Key.
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center space-x-2 pt-1">
+                  <Button
+                    onClick={() => checkHealth(0, 6)}
+                    size="sm"
+                    variant="secondary"
+                    className="text-[10px] py-1 px-2.5 h-auto font-bold"
+                  >
+                    🔄 Reconnect / Wake Up Server
+                  </Button>
+                  <button
+                    onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                    className="text-[10px] text-accent-primary hover:underline font-semibold"
+                  >
+                    {showApiKeyInput ? 'Hide Key' : 'Set Custom Key'}
+                  </button>
+                </div>
+
+                {showApiKeyInput && (
+                  <div className="space-y-1.5 pt-2 border-t border-rose-500/20">
+                    <label className="text-[9px] font-bold text-text-secondary uppercase block">Custom Gemini API Key</label>
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="password"
+                        value={customApiKey}
+                        onChange={(e) => setCustomApiKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        className="flex-1 bg-surface-secondary border border-surface-tertiary rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-primary"
+                      />
+                      <Button
+                        onClick={() => {
+                          if (typeof localStorage !== 'undefined') {
+                            if (customApiKey.trim()) {
+                              localStorage.setItem('GEMINI_API_KEY', customApiKey.trim());
+                            } else {
+                              localStorage.removeItem('GEMINI_API_KEY');
+                            }
+                          }
+                          checkHealth(0, 6);
+                        }}
+                        size="sm"
+                        variant="primary"
+                        className="text-[10px] py-1 px-2 h-auto font-bold"
+                      >
+                        Save & Connect
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -757,14 +812,55 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
             {/* Quota Exceeded Alert Card */}
             {visionStatus === 'QUOTA_EXCEEDED' && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
-                <div>
-                  <div className="font-bold text-[11px]">AI Quota Limit Reached</div>
-                  <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
-                    Rate limit cooldown active. Auto-resuming in {quotaCountdown ?? 60}s...
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs flex flex-col space-y-2">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+                  <div>
+                    <div className="font-bold text-[11px]">AI Quota Limit Reached</div>
+                    <div className="text-[10px] text-text-muted mt-0.5 leading-normal">
+                      Server API limit reached. Resuming in {quotaCountdown ?? 60}s, or enter your own free Gemini API Key below.
+                    </div>
                   </div>
                 </div>
+                <div className="pt-1 flex items-center space-x-2">
+                  <button
+                    onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                    className="text-[10px] text-accent-primary hover:underline font-semibold"
+                  >
+                    {showApiKeyInput ? 'Hide Key' : 'Enter Custom API Key'}
+                  </button>
+                </div>
+                {showApiKeyInput && (
+                  <div className="space-y-1.5 pt-2 border-t border-rose-500/20">
+                    <label className="text-[9px] font-bold text-text-secondary uppercase block">Custom Gemini API Key</label>
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="password"
+                        value={customApiKey}
+                        onChange={(e) => setCustomApiKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        className="flex-1 bg-surface-secondary border border-surface-tertiary rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-primary"
+                      />
+                      <Button
+                        onClick={() => {
+                          if (typeof localStorage !== 'undefined') {
+                            if (customApiKey.trim()) {
+                              localStorage.setItem('GEMINI_API_KEY', customApiKey.trim());
+                            } else {
+                              localStorage.removeItem('GEMINI_API_KEY');
+                            }
+                          }
+                          checkHealth(0, 6);
+                        }}
+                        size="sm"
+                        variant="primary"
+                        className="text-[10px] py-1 px-2 h-auto font-bold"
+                      >
+                        Save & Connect
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
