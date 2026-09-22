@@ -139,6 +139,18 @@ export function sanitizeAudience(val) {
   return cleaned;
 }
 
+export function sanitizeQualification(val) {
+  let cleaned = sanitizeField(val);
+  if (!cleaned) return null;
+  cleaned = cleaned.replace(/[^\x00-\x7F]+/g, '').trim();
+  cleaned = cleaned.replace(/^(?:[\d\s\/]*qualification\s*string\s*:?|qualification\s*:?)\s*/i, '').trim();
+  if (/\bor\b/i.test(cleaned)) {
+    cleaned = cleaned.split(/\s+\bor\b\s+/i)[0].trim();
+  }
+  cleaned = cleaned.replace(/^[\d\s\/]+/, '').trim();
+  return cleaned || null;
+}
+
 export function validateStage1Facts(rawFacts) {
   const ext = rawFacts || {};
   
@@ -184,7 +196,7 @@ export function validateStage1Facts(rawFacts) {
       }
       return {
         name: rawName,
-        qualification: sanitizeField(s.qualification),
+        qualification: sanitizeQualification(s.qualification),
         designation: rawDesig,
         organization: sanitizeField(s.organization)
       };
@@ -203,10 +215,16 @@ export function validateStage2Narratives(rawGen, facts) {
   let highlights = Array.isArray(gen.summaryPoints) ? gen.summaryPoints.map(sanitizeField).filter(Boolean) : [];
   let conclusion = sanitizeField(gen.conclusion) || '';
 
+  const splitSentences = (text) => {
+    if (!text) return [];
+    const parts = text.split(/(?<!\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr|vs|etc))\.(?=\s+[A-Z]|\s*$)/i);
+    return parts.map(s => s.trim()).filter(Boolean).map(s => s.endsWith('.') ? s : s + '.');
+  };
+
   // Paragraph Deduplication Helper
   const dedupeParagraph = (text) => {
     if (!text) return text;
-    const rawSentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+    const rawSentences = splitSentences(text);
     const uniqueSentences = [];
     const seen = new Set();
 
@@ -238,6 +256,25 @@ export function validateStage2Narratives(rawGen, facts) {
 
   obj = dedupeParagraph(obj);
   summary = dedupeParagraph(summary);
+
+  // Cross-section sentence deduplication: remove any sentence from summary that already appears in obj
+  if (obj && summary) {
+    const objNormalizedSentences = new Set(
+      splitSentences(obj)
+        .map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''))
+        .filter(s => s.length > 10)
+    );
+
+    const summarySentences = splitSentences(summary);
+    const filteredSummarySentences = summarySentences.filter(s => {
+      const norm = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return !objNormalizedSentences.has(norm);
+    });
+
+    if (filteredSummarySentences.length > 0) {
+      summary = filteredSummarySentences.join(' ');
+    }
+  }
 
   // Cap Purpose of Event paragraph to maximum 5 sentences (within 5 lines)
   if (obj) {
@@ -474,14 +511,14 @@ EVENT-SPECIFIC & DYNAMIC REPORT GENERATION DIRECTIVES:
 
 2. PURPOSE OF THE EVENT ("objectiveDescription"):
    Generate a concise, formal academic Purpose paragraph of WITHIN 5 LINES (maximum 4 to 5 sentences) tailored specifically to the event type and topic.
-   - Detail the initiative rationale, technical domain context, target audience learning goals, industry relevance, and professional growth in a single, compact 5-line paragraph.
+   - Focus exclusively on WHY the event was initiated: academic/industry rationale, core learning objectives, target audience skill development, and domain significance.
+   - DO NOT start with "The Department of ... organized ..." or repeat event dates/venues. Focus on learning goals and rationale.
    - Ensure zero redundant or repeated sentences.
 
 3. DETAILED EVENT SUMMARY ("summaryPoints" & "eventSummary"):
-   Generate MAXIMUM 5 VALUABLE POINTS (NOT MORE THAN 5 POINTS) for "summaryPoints" and a 5-sentence paragraph for "eventSummary":
-   - Point 1: Organizing Department, School / Club & Event Type declaration.
-   - Point 2: Event Title, Core Subject Theme & Technical Scope.
-   - Point 7: "Future Scope: Develop the capability to navigate domain workflows and future innovation opportunities with confidence."`;
+   Generate MAXIMUM 5 VALUABLE POINTS (NOT MORE THAN 5 POINTS) for "summaryPoints" and a 4-to-5-sentence paragraph for "eventSummary":
+   - Focus exclusively on WHAT occurred during event execution: guest speaker insights, key technical topics demonstrated, hands-on activities, and participant interaction.
+   - DO NOT re-state the Purpose learning goals or rationale. Maintain a distinct execution-focused perspective.`;
 
 const uploadAny = upload.any();
 

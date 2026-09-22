@@ -382,7 +382,7 @@ export const KprcasTemplate: React.FC<KprcasTemplateProps> = ({
             </p>
           )
         });
-        if (data.objectiveDescription) {
+        if (data.objectiveDescription && data.objectiveDescription.trim() !== (data.purpose || '').trim() && !(data.purpose || '').includes(data.objectiveDescription.trim())) {
           rawBlocks.push({
             id: 'objective-desc-text',
             type: 'paragraph',

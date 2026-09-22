@@ -233,6 +233,10 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
     const inputStartDateStr = formatToInputDate(extractedData.eventStartDate || extractedData.date);
     const inputEndDateStr = formatToInputDate(extractedData.eventEndDate || extractedData.eventStartDate || extractedData.date);
     const collaborationStr = (extractedData.collaborators || []).join(', ');
+    const mainPurpose = generatedReport.objective || generatedReport.objectiveDescription || '';
+    const objDesc = (generatedReport.objectiveDescription && generatedReport.objectiveDescription !== mainPurpose)
+      ? generatedReport.objectiveDescription
+      : '';
 
     const incomingData: EventData = {
       title: extractedData.title || '',
@@ -241,10 +245,10 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
       venue: extractedData.venue || '',
       time: extractedData.time || '',
       department: extractedData.department || '',
-      organizingBody: extractedData.coordinator || '',
+      organizingBody: extractedData.coordinator || extractedData.department || '',
       collaboration: collaborationStr,
-      purpose: generatedReport.objective || '',
-      objectiveDescription: generatedReport.objectiveDescription || '',
+      purpose: mainPurpose,
+      objectiveDescription: objDesc,
       eventSummary: generatedReport.eventSummary || '',
       summaryPoints: generatedReport.detailedHighlights || generatedReport.highlights || [],
       outcomePoints: generatedReport.outcomes || [],
@@ -509,6 +513,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
     if (e.target.files && e.target.files[0]) {
       handlePosterUpload(e.target.files[0]);
     }
+    e.target.value = '';
   };
 
   const triggerGeneration = async () => {

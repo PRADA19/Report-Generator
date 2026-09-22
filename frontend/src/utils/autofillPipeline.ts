@@ -111,6 +111,18 @@ export function formatToInputDate(dateStr: string): string {
   return '';
 }
 
+export function sanitizeQualificationFrontend(val: any): string {
+  if (!val) return '';
+  let cleaned = String(val).trim();
+  cleaned = cleaned.replace(/[^\x00-\x7F]+/g, '').trim();
+  cleaned = cleaned.replace(/^(?:[\d\s\/]*qualification\s*string\s*:?|qualification\s*:?)\s*/i, '').trim();
+  if (/\bor\b/i.test(cleaned)) {
+    cleaned = cleaned.split(/\s+\bor\b\s+/i)[0].trim();
+  }
+  cleaned = cleaned.replace(/^[\d\s\/]+/, '').trim();
+  return cleaned;
+}
+
 /**
  * Renders page 1 of a PDF file to a high-resolution PNG Blob via canvas
  */
@@ -458,10 +470,14 @@ export async function executePosterAutofill(
   const inputStartDateStr = formatToInputDate(extractedData.eventStartDate || extractedData.date);
   const inputEndDateStr = formatToInputDate(extractedData.eventEndDate || extractedData.eventStartDate || extractedData.date);
 
+  const formattedTime = (extractedData.eventStartTime && extractedData.eventEndTime && extractedData.eventStartTime !== extractedData.eventEndTime)
+    ? `${extractedData.eventStartTime} to ${extractedData.eventEndTime}`
+    : (extractedData.eventStartTime || extractedData.time || '');
+
   const structuredResourcePersons = (extractedData.resourcePersons && extractedData.resourcePersons.length > 0)
     ? extractedData.resourcePersons.map((rp: any) => ({
         name: rp.name ? String(rp.name).trim() : '',
-        qualification: rp.qualification ? String(rp.qualification).trim() : '',
+        qualification: sanitizeQualificationFrontend(rp.qualification),
         designation: rp.designation ? String(rp.designation).trim() : '',
         organization: rp.organization ? String(rp.organization).trim() : ''
       })).filter((rp: any) => rp.name)
@@ -473,17 +489,22 @@ export async function executePosterAutofill(
 
   const collaborationStr = (extractedData.collaborators || []).join(', ');
 
+  const mainPurpose = generatedReport.objective || generatedReport.objectiveDescription || '';
+  const objDesc = (generatedReport.objectiveDescription && generatedReport.objectiveDescription !== mainPurpose)
+    ? generatedReport.objectiveDescription
+    : '';
+
   const incomingData: EventData = {
     title: extractedData.title || '',
     startDate: inputStartDateStr,
     endDate: inputEndDateStr || inputStartDateStr,
     venue: extractedData.venue || '',
-    time: extractedData.time || '',
+    time: formattedTime,
     department: extractedData.department || '',
-    organizingBody: extractedData.coordinator || '',
+    organizingBody: extractedData.coordinator || extractedData.department || '',
     collaboration: collaborationStr,
-    purpose: generatedReport.objective || '',
-    objectiveDescription: generatedReport.objectiveDescription || '',
+    purpose: mainPurpose,
+    objectiveDescription: objDesc,
     eventSummary: generatedReport.eventSummary || '',
     summaryPoints: generatedReport.detailedHighlights || generatedReport.highlights || [],
     outcomePoints: generatedReport.outcomes || [],

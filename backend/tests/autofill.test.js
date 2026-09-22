@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeField, sanitizeAudience, validateStage1Facts, validateStage2Narratives } from '../routes/autofill.js';
+import { sanitizeField, sanitizeAudience, sanitizeQualification, validateStage1Facts, validateStage2Narratives } from '../routes/autofill.js';
 
 test('Sanitizes placeholder strings to null', () => {
   assert.equal(sanitizeField('Unknown'), null);
@@ -217,4 +217,24 @@ test('Regression Test: Poster A Outcome vs Poster B Outcome isolation', () => {
   assert.notEqual(posterANarratives.keyProgramOutcomes[0], posterBNarratives.keyProgramOutcomes[0]);
   assert.equal(posterANarratives.keyProgramOutcomes[0], 'Outcome A: Cloud certifications gained');
   assert.equal(posterBNarratives.keyProgramOutcomes[0], 'Outcome B: Patent concepts understood');
+});
+
+test('Sanitizes corrupted qualification strings and strips prompt leakage', () => {
+  assert.equal(sanitizeQualification('15妙/ qualification string: M.E., (Ph.D.) or M.E., (Ph.D.)'), 'M.E., (Ph.D.)');
+  assert.equal(sanitizeQualification('qualification: Ph.D.'), 'Ph.D.');
+  assert.equal(sanitizeQualification('B.E., M.Tech'), 'B.E., M.Tech');
+  assert.equal(sanitizeQualification(null), null);
+});
+
+test('Eliminates cross-section duplicate sentences between Purpose and Event Summary', () => {
+  const facts = { eventTitle: 'IPR Workshop', resourcePersons: [{ name: 'Dr. Smith', designation: 'Expert' }] };
+  const rawGen = {
+    objectiveDescription: 'This IPR event aimed to provide patent awareness. Participants learned about patent filing.',
+    eventSummary: 'This IPR event aimed to provide patent awareness. Speaker Dr. Smith demonstrated novelty search workflows.'
+  };
+
+  const validated = validateStage2Narratives(rawGen, facts);
+  assert.equal(validated.objectiveDescription.includes('This IPR event aimed to provide patent awareness.'), true);
+  assert.equal(validated.eventSummary.includes('This IPR event aimed to provide patent awareness.'), false);
+  assert.equal(validated.eventSummary.includes('Speaker Dr. Smith demonstrated novelty search workflows.'), true);
 });
