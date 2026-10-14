@@ -91,6 +91,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
     return (typeof localStorage !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') : '') || '';
   });
   const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
+  const [apiKeyFeedback, setApiKeyFeedback] = useState<{ type: 'success' | 'error' | 'loading'; message: string } | null>(null);
 
   const [visionStatus, setVisionStatus] = useState<'ONLINE' | 'PROCESSING' | 'QUOTA_WARNING' | 'QUOTA_EXCEEDED' | 'OFFLINE' | 'ERROR' | 'loading'>('loading');
   const [connectingMessage, setConnectingMessage] = useState<string>('Connecting to Gemini AI...');
@@ -128,23 +129,43 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
       if (res.status === 429 || data.status === 'QUOTA_EXCEEDED') {
         setVisionStatus('QUOTA_EXCEEDED');
         setQuotaCountdown(data.retryAfter || 60);
+        if (userApiKey) {
+          setApiKeyFeedback({ type: 'error', message: data.message || 'Custom key daily quota reached.' });
+        }
+      } else if (res.status === 400 || (data && data.message && data.message.includes('invalid'))) {
+        setVisionStatus('OFFLINE');
+        if (userApiKey) {
+          setApiKeyFeedback({ type: 'error', message: data.message || 'Invalid Gemini API key.' });
+        }
       } else if (data && data.status === 'QUOTA_WARNING') {
         setVisionStatus('QUOTA_WARNING');
+        if (userApiKey) {
+          setApiKeyFeedback({ type: 'success', message: 'Custom API Key verified & connected!' });
+        }
       } else if (data && data.status === 'OFFLINE') {
-        if (retryCount < maxRetries) {
+        if (retryCount < maxRetries && !userApiKey) {
           setTimeout(() => checkHealth(retryCount + 1, maxRetries), 3500);
         } else {
           setVisionStatus('OFFLINE');
+          if (userApiKey) {
+            setApiKeyFeedback({ type: 'error', message: data.message || 'Custom key could not connect.' });
+          }
         }
       } else if (!res.ok) {
-        if (retryCount < maxRetries) {
+        if (retryCount < maxRetries && !userApiKey) {
           setTimeout(() => checkHealth(retryCount + 1, maxRetries), 3500);
         } else {
           setVisionStatus('OFFLINE');
+          if (userApiKey) {
+            setApiKeyFeedback({ type: 'error', message: data.message || 'Custom key connection failed.' });
+          }
         }
       } else {
         setVisionStatus('ONLINE');
         setQuotaCountdown(null);
+        if (userApiKey) {
+          setApiKeyFeedback({ type: 'success', message: 'Custom API Key verified & online!' });
+        }
       }
     } catch (error: any) {
       clearTimeout(coldStartTimer);
@@ -156,6 +177,28 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
         setVisionStatus('OFFLINE');
       }
     }
+  };
+
+  const handleSaveCustomKey = async () => {
+    const key = customApiKey.trim();
+    setApiKeyFeedback({ type: 'loading', message: 'Testing key with Gemini...' });
+    if (typeof localStorage !== 'undefined') {
+      if (key) {
+        localStorage.setItem('GEMINI_API_KEY', key);
+      } else {
+        localStorage.removeItem('GEMINI_API_KEY');
+      }
+    }
+    await checkHealth(0, 1);
+  };
+
+  const handleClearCustomKey = async () => {
+    setCustomApiKey('');
+    setApiKeyFeedback(null);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('GEMINI_API_KEY');
+    }
+    await checkHealth(0, 1);
   };
 
   useEffect(() => {
@@ -686,7 +729,7 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
               <Sparkles className="w-5 h-5 text-accent-primary animate-pulse" />
               <span>Online Auto Fill Workspace</span>
               {visionStatus === 'ONLINE' && (
-                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI (gemini-3.6-flash) is connected and available for Auto Fill.">
+                <Badge variant="success" className="text-[10px] ml-2 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold animate-none" title="Gemini AI is connected and available for Auto Fill.">
                   ● Gemini AI Online
                 </Badge>
               )}
@@ -770,7 +813,17 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
 
                 {showApiKeyInput && (
                   <div className="space-y-1.5 pt-2 border-t border-rose-500/20">
-                    <label className="text-[9px] font-bold text-text-secondary uppercase block">Custom Gemini API Key</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] font-bold text-text-secondary uppercase block">Custom Gemini API Key</label>
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[9px] text-accent-primary hover:underline font-semibold"
+                      >
+                        Get Free Key ↗
+                      </a>
+                    </div>
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="password"
@@ -780,23 +833,29 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                         className="flex-1 bg-surface-secondary border border-surface-tertiary rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-primary"
                       />
                       <Button
-                        onClick={() => {
-                          if (typeof localStorage !== 'undefined') {
-                            if (customApiKey.trim()) {
-                              localStorage.setItem('GEMINI_API_KEY', customApiKey.trim());
-                            } else {
-                              localStorage.removeItem('GEMINI_API_KEY');
-                            }
-                          }
-                          checkHealth(0, 6);
-                        }}
+                        onClick={handleSaveCustomKey}
                         size="sm"
                         variant="primary"
                         className="text-[10px] py-1 px-2 h-auto font-bold"
                       >
                         Save & Connect
                       </Button>
+                      {customApiKey && (
+                        <Button
+                          onClick={handleClearCustomKey}
+                          size="sm"
+                          variant="ghost"
+                          className="text-[10px] py-1 px-1.5 h-auto text-text-muted hover:text-rose-500"
+                        >
+                          Clear
+                        </Button>
+                      )}
                     </div>
+                    {apiKeyFeedback && (
+                      <div className={`text-[10px] font-semibold mt-1 ${apiKeyFeedback.type === 'success' ? 'text-emerald-500' : apiKeyFeedback.type === 'error' ? 'text-rose-500' : 'text-amber-500'}`}>
+                        {apiKeyFeedback.message}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -837,7 +896,17 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                 </div>
                 {showApiKeyInput && (
                   <div className="space-y-1.5 pt-2 border-t border-rose-500/20">
-                    <label className="text-[9px] font-bold text-text-secondary uppercase block">Custom Gemini API Key</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] font-bold text-text-secondary uppercase block">Custom Gemini API Key</label>
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[9px] text-accent-primary hover:underline font-semibold"
+                      >
+                        Get Free Key ↗
+                      </a>
+                    </div>
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="password"
@@ -847,23 +916,29 @@ export const AiAutofillModal: React.FC<AiAutofillModalProps> = ({ isOpen, onClos
                         className="flex-1 bg-surface-secondary border border-surface-tertiary rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-primary"
                       />
                       <Button
-                        onClick={() => {
-                          if (typeof localStorage !== 'undefined') {
-                            if (customApiKey.trim()) {
-                              localStorage.setItem('GEMINI_API_KEY', customApiKey.trim());
-                            } else {
-                              localStorage.removeItem('GEMINI_API_KEY');
-                            }
-                          }
-                          checkHealth(0, 6);
-                        }}
+                        onClick={handleSaveCustomKey}
                         size="sm"
                         variant="primary"
                         className="text-[10px] py-1 px-2 h-auto font-bold"
                       >
                         Save & Connect
                       </Button>
+                      {customApiKey && (
+                        <Button
+                          onClick={handleClearCustomKey}
+                          size="sm"
+                          variant="ghost"
+                          className="text-[10px] py-1 px-1.5 h-auto text-text-muted hover:text-rose-500"
+                        >
+                          Clear
+                        </Button>
+                      )}
                     </div>
+                    {apiKeyFeedback && (
+                      <div className={`text-[10px] font-semibold mt-1 ${apiKeyFeedback.type === 'success' ? 'text-emerald-500' : apiKeyFeedback.type === 'error' ? 'text-rose-500' : 'text-amber-500'}`}>
+                        {apiKeyFeedback.message}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

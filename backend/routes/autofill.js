@@ -9,6 +9,12 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 let lastGeminiStatus = 'ONLINE';
+let healthCache = {
+  result: null,
+  status: 200,
+  timestamp: 0
+};
+const HEALTH_CACHE_TTL = 60 * 1000; // 60 seconds TTL for health check cache
 
 // Database Connection Pool configuration
 const pool = new pg.Pool({
@@ -60,16 +66,21 @@ const getModelName = () => {
   if (model && model.trim() !== '') {
     return model.trim();
   }
-  return 'gemini-3.6-flash';
+  return 'gemini-flash-lite-latest';
 };
 
 function getApiKeys(req) {
-  const keys = [];
   const cleanKey = k => k ? k.trim().replace(/^['"]|['"]$/g, '') : '';
   const headerKey = req && req.headers ? req.headers['x-gemini-api-key'] : null;
   if (headerKey && headerKey.trim()) {
-    keys.push(...headerKey.split(',').map(cleanKey).filter(Boolean));
+    const userKeys = headerKey.split(',').map(cleanKey).filter(Boolean);
+    if (userKeys.length > 0) {
+      // When client passes custom key(s), use them exclusively so server errors don't mask custom key status
+      return userKeys;
+    }
   }
+
+  const keys = [];
   if (process.env.GEMINI_API_KEYS) {
     const list = process.env.GEMINI_API_KEYS.split(',').map(cleanKey).filter(Boolean);
     keys.push(...list);
@@ -550,7 +561,14 @@ router.post(['/', '/extract'], handleUpload, rateLimitMiddleware, authMiddleware
   const base64Image = file.buffer.toString('base64');
   const mimeType = file.mimetype || 'image/jpeg';
   const configuredModel = getModelName();
-  const modelCandidates = Array.from(new Set([configuredModel, 'gemini-3.6-flash', 'gemini-flash-latest'])).filter(Boolean);
+  const modelCandidates = Array.from(new Set([
+    configuredModel,
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash'
+  ])).filter(Boolean);
 
   let stage1Facts = null;
   let stage2Narratives = null;
@@ -631,11 +649,23 @@ router.post(['/', '/extract'], handleUpload, rateLimitMiddleware, authMiddleware
 
   if (!stage1Facts || !stage2Narratives) {
     const errMsg = lastError ? lastError.message : 'Unknown Gemini error';
+    const hasCustomKey = !!(req.headers && req.headers['x-gemini-api-key']);
+
+    if (hasCustomKey && (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('400'))) {
+      return res.status(400).json({
+        status: 'OFFLINE',
+        error: 'The custom Gemini API Key you entered is invalid. Please copy a valid key from Google AI Studio.',
+        fallbackNeeded: true
+      });
+    }
+
     if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
       lastGeminiStatus = 'QUOTA_EXCEEDED';
       return res.status(429).json({
         status: 'QUOTA_EXCEEDED',
-        error: "Today's Gemini AI daily quota limit has been reached on configured API keys. You can add another free key or upgrade billing in Google AI Studio.",
+        error: hasCustomKey
+          ? "Your custom Gemini API Key has reached its daily quota limit. Please check your Google AI Studio quota."
+          : "Today's Gemini AI daily quota limit has been reached on configured API keys. You can add another free key or upgrade billing in Google AI Studio.",
         retryAfter: 60,
         fallbackNeeded: true
       });
@@ -719,6 +749,15 @@ router.get('/health', async (req, res) => {
   const timestamps = (ipLimits.get(ip) || []).filter(t => now - t < RATE_LIMIT_WINDOW);
   const isApproachingLimit = timestamps.length >= 7;
 
+  // Serve cached health result if within TTL and not using a custom header key
+  const hasCustomHeaderKey = !!(req.headers && req.headers['x-gemini-api-key']);
+  if (!hasCustomHeaderKey && healthCache.result && (now - healthCache.timestamp < HEALTH_CACHE_TTL)) {
+    return res.status(healthCache.status || 200).json({
+      ...healthCache.result,
+      quotaWarning: isApproachingLimit
+    });
+  }
+
   if (apiKeys.length === 0) {
     lastGeminiStatus = 'OFFLINE';
     return res.status(503).json({
@@ -730,49 +769,87 @@ router.get('/health', async (req, res) => {
     });
   }
 
+  const candidateModels = Array.from(new Set([
+    model,
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash'
+  ])).filter(Boolean);
+
   let lastHealthErr = null;
   for (const apiKey of apiKeys) {
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const m = genAI.getGenerativeModel({ model });
-      await m.generateContent('ping');
-      lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
-      return res.json({
-        status: lastGeminiStatus,
-        provider: 'google',
-        model,
-        available: true,
-        quotaWarning: isApproachingLimit,
-        message: isApproachingLimit
-          ? `Gemini AI (${model}) is connected. High usage detected.`
-          : `Gemini AI (${model}) is connected and online.`
-      });
-    } catch (err) {
-      lastHealthErr = err;
+    const genAI = new GoogleGenerativeAI(apiKey);
+    for (const targetModel of candidateModels) {
+      try {
+        const m = genAI.getGenerativeModel({ model: targetModel });
+        // Use countTokens instead of generateContent to avoid burning free-tier daily generation quota
+        await m.countTokens('ping');
+        lastGeminiStatus = isApproachingLimit ? 'QUOTA_WARNING' : 'ONLINE';
+        const responseData = {
+          status: lastGeminiStatus,
+          provider: 'google',
+          model: targetModel,
+          available: true,
+          quotaWarning: isApproachingLimit,
+          message: isApproachingLimit
+            ? `Gemini AI (${targetModel}) is connected. High usage detected.`
+            : `Gemini AI (${targetModel}) is connected and online.`
+        };
+        if (!hasCustomHeaderKey) {
+          healthCache = { result: responseData, status: 200, timestamp: now };
+        }
+        return res.json(responseData);
+      } catch (err) {
+        lastHealthErr = err;
+      }
     }
   }
 
   const errMsg = lastHealthErr ? lastHealthErr.message : '';
+  if (hasCustomHeaderKey && (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || errMsg.includes('400'))) {
+    return res.status(400).json({
+      status: 'OFFLINE',
+      provider: 'google',
+      model,
+      available: false,
+      message: 'The custom Gemini API Key you entered is invalid. Please copy a valid key from Google AI Studio.'
+    });
+  }
+
   if (errMsg.includes('Quota') || errMsg.includes('429') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
     lastGeminiStatus = 'QUOTA_EXCEEDED';
-    return res.status(429).json({
+    const errPayload = {
       status: 'QUOTA_EXCEEDED',
       provider: 'google',
       model,
       available: false,
       retryAfter: 60,
-      message: "Today's AI request quota has been reached on configured keys."
-    });
+      message: hasCustomHeaderKey
+        ? "Your custom Gemini API Key has reached its quota limit. Please check your Google AI Studio quota."
+        : "Today's AI request quota has been reached on configured keys."
+    };
+    if (!hasCustomHeaderKey) {
+      healthCache = { result: errPayload, status: 429, timestamp: now };
+    }
+    return res.status(429).json(errPayload);
   }
 
   lastGeminiStatus = 'OFFLINE';
-  return res.status(500).json({
+  const offlinePayload = {
     status: 'OFFLINE',
     provider: 'google',
     model,
     available: false,
-    message: `Gemini AI health check error: ${errMsg}`
-  });
+    message: hasCustomHeaderKey
+      ? `Custom Gemini API Key error: ${errMsg}`
+      : `Gemini AI health check error: ${errMsg}`
+  };
+  if (!hasCustomHeaderKey) {
+    healthCache = { result: offlinePayload, status: 500, timestamp: now };
+  }
+  return res.status(500).json(offlinePayload);
 });
 
 export default router;
